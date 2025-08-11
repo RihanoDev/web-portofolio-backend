@@ -1,0 +1,85 @@
+name: API Release (tags)
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Compute tags
+        id: meta
+        run: |
+          VERSION="${GITHUB_REF_NAME#api-}"
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+          echo "image=ghcr.io/${{ github.repository_owner }}/web-portofolio-backend" >> $GITHUB_OUTPUT
+
+      - name: Build and push API image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./web-portofolio-backend
+          push: true
+          tags: |
+            ${{ steps.meta.outputs.image }}:latest
+            ${{ steps.meta.outputs.image }}:${{ steps.meta.outputs.version }}
+
+  deploy:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            set -e
+            IMAGE="ghcr.io/${{ github.repository_owner }}/web-portofolio-backend"
+            VERSION="${GITHUB_REF_NAME#api-}"
+            mkdir -p ~/web-porto-backend
+            cd ~/web-porto-backend
+            cat > docker-compose.yml <<'YAML'
+            services:
+              api:
+                image: IMAGE_PLACEHOLDER:VERSION_PLACEHOLDER
+                container_name: web-porto-api
+                restart: unless-stopped
+                environment:
+                  - GIN_MODE=release
+                ports:
+                  - "127.0.0.1:8080:8080"
+                volumes:
+                  - ./config.json:/app/config.json:ro
+            YAML
+            sed -i "s|IMAGE_PLACEHOLDER|$IMAGE|g" docker-compose.yml
+            sed -i "s|VERSION_PLACEHOLDER|$VERSION|g" docker-compose.yml
+            if [ -n "${{ secrets.GHCR_PAT }}" ]; then
+              echo "${{ secrets.GHCR_PAT }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+            fi
+            if [ -n "${{ secrets.API_CONFIG_JSON_B64 }}" ]; then
+              echo "${{ secrets.API_CONFIG_JSON_B64 }}" | base64 -d > config.json
+            fi
+            docker pull "$IMAGE:$VERSION"
+            (docker compose down || docker-compose down || true)
+            (docker compose up -d || docker-compose up -d)
