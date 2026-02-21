@@ -39,6 +39,8 @@ jobs:
         with:
           context: .
           push: true
+          build-args: |
+            PORT=${{ env.DEV_PORT }}
           tags: |
             ${{ env.IMAGE_NAME }}:dev-latest
             ${{ env.IMAGE_NAME }}:dev-${{ steps.commit_info.outputs.SHORT_SHA }}
@@ -84,10 +86,10 @@ jobs:
             docker run -d \
               --name web-porto-backend-dev \
               --restart unless-stopped \
-              -p ${{ env.DEV_PORT }}:8080 \
+              -p ${{ env.DEV_PORT }}:${{ env.DEV_PORT }} \
               -e GIN_MODE=debug \
               -e APP_DEBUG=true \
-              -e SERVER_PORT=8080 \
+              -e SERVER_PORT=${{ env.DEV_PORT }} \
               -e DB_HOST=${{ secrets.DB_HOST }} \
               -e DB_PORT=${{ secrets.DB_PORT }} \
               -e DB_USER=${{ secrets.DB_USER }} \

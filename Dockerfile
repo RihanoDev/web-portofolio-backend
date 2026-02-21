@@ -13,6 +13,10 @@ RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o /out/web-porto-backend ./
 # Run stage
 ########################
 FROM alpine:3.20
+
+# Accept PORT as build argument with default value
+ARG PORT=8080
+
 WORKDIR /app
 RUN adduser -D -H app && apk add --no-cache ca-certificates tzdata && update-ca-certificates
 COPY --from=builder /out/web-porto-backend /app/web-porto-backend
@@ -20,6 +24,7 @@ COPY --from=builder /out/web-porto-backend /app/web-porto-backend
 RUN mkdir -p /app/log && chown -R app:app /app
 # Expect config.json to be mounted into /app/config.json
 ENV GIN_MODE=release
-EXPOSE 8080
+# Expose dynamic port from build arg
+EXPOSE ${PORT}
 USER app
 ENTRYPOINT ["/app/web-porto-backend"]
