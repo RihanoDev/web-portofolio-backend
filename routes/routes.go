@@ -12,6 +12,23 @@ import (
 
 // SetupRoutes configures all application routes
 func SetupRoutes(router *gin.Engine, handlerRegistry *handlers.HandlerRegistry, authService *auth.AuthService) {
+	// Health check endpoint
+	router.GET("/health", func(c *gin.Context) {
+		c.JSON(200, gin.H{
+			"status": "ok",
+			"service": "web-porto-backend",
+		})
+	})
+
+	// Root endpoint
+	router.GET("/", func(c *gin.Context) {
+		c.JSON(200, gin.H{
+			"message": "Web Portfolio API",
+			"version": "1.0.0",
+			"status": "running",
+		})
+	})
+
 	// Setup API routes using the API package
 	api.SetupAPIRoutes(router, handlerRegistry, authService)
 }
