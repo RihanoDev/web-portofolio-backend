@@ -55,8 +55,15 @@ func main() {
 		log.Fatal("Failed to connect to database:", err)
 	}
 
-	// Auto-migrate analytics table (optional safety)
-	if err := db.AutoMigrate(&models.PageView{}, &models.Media{}, &models.Setting{}); err != nil {
+	// Auto-migrate tables (optional safety)
+	if err := db.AutoMigrate(
+		&models.PageView{},
+		&models.Media{},
+		&models.Setting{},
+		&models.Article{},
+		&models.Project{},
+		&models.Experience{},
+	); err != nil {
 		log.Fatal("Failed to migrate database:", err)
 	}
 

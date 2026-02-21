@@ -1,6 +1,7 @@
 package analytics
 
 import (
+	"fmt"
 	"net/http"
 	"time"
 	applog "web-porto-backend/common/logger"
@@ -120,4 +121,22 @@ func (h *Handler) GetSeries(c *gin.Context) {
 	}
 	log.Info("get series ok", applog.Fields{"page": page, "points": len(points)})
 	h.httpAdapter.SendSuccessResponse(c, http.StatusOK, points, "Timeseries fetched")
+}
+
+// GET /api/v1/analytics/top-pages?limit=10
+func (h *Handler) GetTopPages(c *gin.Context) {
+	log := applog.GetLogger().WithFields(applog.Fields{"handler": "analytics.GetTopPages"})
+	limitStr := c.DefaultQuery("limit", "10")
+	var limit int
+	if _, err := fmt.Sscanf(limitStr, "%d", &limit); err != nil {
+		limit = 10
+	}
+
+	pages, err := h.service.GetTopPages(limit)
+	if err != nil {
+		log.Error("get top pages failed", applog.Fields{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, response.NewErrorResponse("Failed to get top pages", err.Error()))
+		return
+	}
+	h.httpAdapter.SendSuccessResponse(c, http.StatusOK, pages, "Top pages fetched")
 }

@@ -36,6 +36,7 @@ type Service interface {
 	GetAll() ([]dto.TagResponse, error)
 	GetByID(id int) (*dto.TagResponse, error)
 	GetByName(name string) (*dto.TagResponse, error)
+	GetBySlug(slug string) (*dto.TagResponse, error)
 	Create(tag *dto.CreateTagRequest) (*dto.TagResponse, error)
 	Update(id int, tag *dto.UpdateTagRequest) (*dto.TagResponse, error)
 	Delete(id int) error
@@ -83,6 +84,19 @@ func (s *service) GetByID(id int) (*dto.TagResponse, error) {
 
 func (s *service) GetByName(name string) (*dto.TagResponse, error) {
 	tag, err := s.repo.GetByName(name)
+	if err != nil {
+		return nil, err
+	}
+
+	return &dto.TagResponse{
+		ID:   tag.ID,
+		Name: tag.Name,
+		Slug: tag.Slug,
+	}, nil
+}
+
+func (s *service) GetBySlug(slug string) (*dto.TagResponse, error) {
+	tag, err := s.repo.GetBySlug(slug)
 	if err != nil {
 		return nil, err
 	}

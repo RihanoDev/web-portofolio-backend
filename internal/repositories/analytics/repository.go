@@ -2,6 +2,7 @@ package analytics
 
 import (
 	"strings"
+	"sync"
 	"time"
 	applog "web-porto-backend/common/logger"
 	"web-porto-backend/internal/domain/models"
@@ -22,11 +23,17 @@ type TimeSeriesPoint struct {
 	Count  int64     `json:"count"`
 }
 
+type PageCount struct {
+	Page  string `json:"page"`
+	Count int64  `json:"count"`
+}
+
 type Repository interface {
 	TrackView(v *models.PageView) error
 	GetStats(page string) (*ViewStats, error)
 	GetStatsWithFilter(page string, start, end *time.Time, country string) (*ViewStats, error)
 	GetTimeSeries(page string, start, end time.Time, interval string) ([]TimeSeriesPoint, error)
+	GetTopPages(limit int) ([]PageCount, error)
 }
 
 type repository struct {
@@ -64,12 +71,14 @@ func (r *repository) TrackView(v *models.PageView) error {
 
 	// Invalidate cache entries to force refresh on next request
 	// This avoids serving stale data after new views are added
+	cacheMutex.Lock()
 	for key := range statsMemCache {
 		if key == "all" || (v.Page != "" && key == v.Page) ||
 			(strings.HasPrefix(key, "filter:") && strings.Contains(key, "p:"+v.Page+":")) {
 			delete(statsMemCache, key)
 		}
 	}
+	cacheMutex.Unlock()
 
 	log.Info("view tracked, cache invalidated", applog.Fields{"page": v.Page, "visitor": v.VisitorID})
 	return nil
@@ -83,7 +92,10 @@ type statsCache struct {
 }
 
 // Global cache map (page -> stats)
-var statsMemCache = map[string]statsCache{}
+var (
+	statsMemCache = map[string]statsCache{}
+	cacheMutex    sync.RWMutex
+)
 
 func (r *repository) GetStats(page string) (*ViewStats, error) {
 	log := applog.GetLogger().WithFields(applog.Fields{"repo": "analytics", "method": "GetStats", "page": page})
@@ -95,12 +107,15 @@ func (r *repository) GetStats(page string) (*ViewStats, error) {
 	}
 
 	// Check cache first (5 minute TTL)
+	cacheMutex.RLock()
 	if cache, ok := statsMemCache[cacheKey]; ok {
 		if time.Since(cache.timestamp) < 5*time.Minute {
+			cacheMutex.RUnlock()
 			log.Info("using cached stats", applog.Fields{"page": page, "age": time.Since(cache.timestamp).Seconds()})
 			return cache.stats, nil
 		}
 	}
+	cacheMutex.RUnlock()
 
 	var stats ViewStats
 	now := time.Now()
@@ -154,11 +169,13 @@ func (r *repository) GetStats(page string) (*ViewStats, error) {
 	}
 
 	// Cache the result
+	cacheMutex.Lock()
 	statsMemCache[cacheKey] = statsCache{
 		stats:     &stats,
 		timestamp: now,
 		key:       cacheKey,
 	}
+	cacheMutex.Unlock()
 
 	log.Info("stats computed and cached", applog.Fields{"total": stats.Total, "unique": stats.Unique})
 	return &stats, nil
@@ -184,8 +201,10 @@ func (r *repository) GetStatsWithFilter(page string, start, end *time.Time, coun
 	}
 
 	// Check cache first (2 minute TTL for filtered results)
+	cacheMutex.RLock()
 	if cache, ok := statsMemCache[cacheKey]; ok {
 		if time.Since(cache.timestamp) < 2*time.Minute {
+			cacheMutex.RUnlock()
 			log.Info("using cached filtered stats", applog.Fields{
 				"page": page,
 				"age":  time.Since(cache.timestamp).Seconds(),
@@ -193,6 +212,7 @@ func (r *repository) GetStatsWithFilter(page string, start, end *time.Time, coun
 			return cache.stats, nil
 		}
 	}
+	cacheMutex.RUnlock()
 
 	var stats ViewStats
 	now := time.Now()
@@ -256,11 +276,13 @@ func (r *repository) GetStatsWithFilter(page string, start, end *time.Time, coun
 	stats.Unique = result.UniqueVisitors
 
 	// Cache results
+	cacheMutex.Lock()
 	statsMemCache[cacheKey] = statsCache{
 		stats:     &stats,
 		timestamp: now,
 		key:       cacheKey,
 	}
+	cacheMutex.Unlock()
 
 	log.Info("filtered stats computed and cached", applog.Fields{"total": stats.Total, "unique": stats.Unique})
 	return &stats, nil
@@ -295,4 +317,15 @@ func (r *repository) GetTimeSeries(page string, start, end time.Time, interval s
 	}
 	log.Info("timeseries computed", applog.Fields{"points": len(points)})
 	return points, nil
+}
+
+func (r *repository) GetTopPages(limit int) ([]PageCount, error) {
+	log := applog.GetLogger().WithFields(applog.Fields{"repo": "analytics", "method": "GetTopPages"})
+	var results []PageCount
+	query := "SELECT page, COUNT(*) as count FROM page_views GROUP BY page ORDER BY count DESC LIMIT ?"
+	if err := r.db.Raw(query, limit).Scan(&results).Error; err != nil {
+		log.Error("top pages query failed", applog.Fields{"error": err.Error()})
+		return nil, err
+	}
+	return results, nil
 }
