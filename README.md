@@ -316,8 +316,30 @@ curl -X POST http://localhost:8080/posts \
     "name": "Web Porto CMS",
     "version": "1.0.0",
     "debug": true
+  },
+  "analytics": {
+    "api_key": "dev-analytics-key"
   }
 }
+```
+
+### Development vs Production:
+
+**Development:**
+
+```bash
+GIN_MODE=debug
+APP_DEBUG=true
+DB_HOST=localhost
+```
+
+**Production:**
+
+```bash
+GIN_MODE=release
+APP_DEBUG=false
+DB_HOST=production-db.example.com
+JWT_SECRET=strong-random-secret
 ```
 
 ## 🔒 Security Features
@@ -330,50 +352,18 @@ curl -X POST http://localhost:8080/posts \
 
 ## 🚀 Production Deployment
 
-> **📘 Complete deployment guide:** See [DEPLOYMENT.md](./DEPLOYMENT.md) for detailed CI/CD setup and GitHub secrets configuration.
+### Environment Variables:
 
-### Quick Overview
-
-The application uses **dual workflows** for automated deployment:
-
-- **Production**: Triggered by version tags (`v*`), deploys to port **1200**
-- **Development**: Triggered by `development` branch push, deploys to port **2200**
-
-Both environments share the same database and server credentials (via GitHub environment secrets).
-
-### Required GitHub Secrets
-
-Set these in repository Settings → Environments → production:
+For production, consider using environment variables instead of config.json:
 
 ```bash
-# Server/SSH
-SERVER_HOST, SERVER_PORT, SERVER_USER, SERVER_SSH_KEY
-
-# Docker Hub
-DOCKER_USERNAME, DOCKER_PASSWORD
-
-# Database (shared for dev & prod)
-DB_HOST, DB_PORT, DB_USER, DB_PASSWORD, DB_NAME
-
-# Application
-JWT_SECRET
+export DB_HOST=your-production-db-host
+export DB_PASSWORD=your-production-password
+export JWT_SECRET=your-production-jwt-secret
+export GIN_MODE=release
 ```
 
-### Deploy to Production
-
-```bash
-git tag v1.0.0
-git push origin v1.0.0
-```
-
-### Deploy to Development
-
-```bash
-git checkout development
-git push origin development
-```
-
-### Local Development Build
+### Build for Production:
 
 ```bash
 go build -o web-porto-backend main.go

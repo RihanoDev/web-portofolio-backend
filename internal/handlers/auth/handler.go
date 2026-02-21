@@ -1,7 +1,10 @@
 ﻿package auth
 
 import (
+	"bytes"
+	"io"
 	"net/http"
+	applog "web-porto-backend/common/logger"
 	"web-porto-backend/common/response"
 	httpAdapter "web-porto-backend/internal/adapters/http"
 	"web-porto-backend/internal/auth"
@@ -41,29 +44,60 @@ type LoginResponse struct {
 	User  models.User `json:"user"`
 }
 
+const (
+	msgFailedGenerateToken = "Failed to generate token"
+)
+
 func (h *Handler) Login(c *gin.Context) {
+	log := applog.GetLogger().WithFields(applog.Fields{"handler": "auth.Login"})
+
+	// Debug headers
+	log.Info("request headers", applog.Fields{
+		"content_type": c.GetHeader("Content-Type"),
+		"origin":       c.GetHeader("Origin"),
+		"host":         c.GetHeader("Host"),
+	})
+
 	var req LoginRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
+		log.Warn("invalid login payload", applog.Fields{"error": err.Error()})
+		// Get raw body for debugging
+		bodyBytes, _ := io.ReadAll(c.Request.Body)
+		c.Request.Body = io.NopCloser(bytes.NewBuffer(bodyBytes)) // Reset body
+		log.Warn("raw request body", applog.Fields{"body": string(bodyBytes)})
 		c.JSON(http.StatusBadRequest, response.NewErrorResponse("Invalid request data", err.Error()))
 		return
 	}
 
+	// Debug
+	log.Info("login attempt", applog.Fields{"email": req.Email})
+
 	user, err := h.userService.GetByEmail(req.Email)
 	if err != nil {
+		log.Info("user not found or fetch failed", applog.Fields{"email": req.Email, "error": err.Error()})
 		c.JSON(http.StatusUnauthorized, response.NewErrorResponse("Invalid credentials"))
 		return
 	}
 
 	if !h.userService.CheckPassword(user.PasswordHash, req.Password) {
+		log.Info("invalid password", applog.Fields{"user_id": user.ID, "email": user.Email})
 		c.JSON(http.StatusUnauthorized, response.NewErrorResponse("Invalid credentials"))
 		return
 	}
 
 	token, err := h.jwtService.GenerateToken(user.ID, user.Email, user.Role)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, response.NewErrorResponse("Failed to generate token", err.Error()))
+		log.Error("failed generating token", applog.Fields{"user_id": user.ID, "error": err.Error()})
+		c.JSON(http.StatusInternalServerError, response.NewErrorResponse(msgFailedGenerateToken, err.Error()))
 		return
 	}
+
+	// Print token to logs for debugging
+	log.Info("token generated", applog.Fields{
+		"user_id":      user.ID,
+		"token_length": len(token),
+		"token_prefix": token[:10] + "...",
+	})
 
 	// Don't return password hash
 	user.PasswordHash = ""
@@ -72,6 +106,12 @@ func (h *Handler) Login(c *gin.Context) {
 		Token: token,
 		User:  *user,
 	}
+
+	log.Info("login success", applog.Fields{"user_id": user.ID, "email": user.Email, "role": user.Role})
+
+	// Set CORS headers explicitly for debugging
+	c.Header("Access-Control-Allow-Origin", c.GetHeader("Origin"))
+	c.Header("Access-Control-Allow-Credentials", "true")
 
 	h.httpAdapter.SendSuccessResponse(c, http.StatusOK, loginResponse, "Login successful")
 }
@@ -105,7 +145,7 @@ func (h *Handler) Register(c *gin.Context) {
 	// Generate token for the new user
 	token, err := h.jwtService.GenerateToken(user.ID, user.Email, user.Role)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, response.NewErrorResponse("Failed to generate token", err.Error()))
+		c.JSON(http.StatusInternalServerError, response.NewErrorResponse(msgFailedGenerateToken, err.Error()))
 		return
 	}
 
@@ -136,7 +176,7 @@ func (h *Handler) RefreshToken(c *gin.Context) {
 
 	token, err := h.jwtService.GenerateToken(user.ID, user.Email, user.Role)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, response.NewErrorResponse("Failed to generate token", err.Error()))
+		c.JSON(http.StatusInternalServerError, response.NewErrorResponse(msgFailedGenerateToken, err.Error()))
 		return
 	}
 
