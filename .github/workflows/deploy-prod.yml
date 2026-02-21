@@ -24,7 +24,11 @@ jobs:
       - name: Extract tag version
         id: extract_version
         run: |
-          echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+          if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
+            echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+          else
+            echo "VERSION=${GITHUB_REF#refs/heads/}" | sed 's/\//-/g' >> $GITHUB_OUTPUT
+          fi
           echo "SHORT_SHA=${GITHUB_SHA::8}" >> $GITHUB_OUTPUT
 
       - name: Set up Docker Buildx
