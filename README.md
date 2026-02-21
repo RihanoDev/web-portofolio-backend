@@ -287,6 +287,56 @@ curl -X POST http://localhost:8080/posts \
 
 ## 📝 Configuration
 
+The application supports **dual configuration**: JSON config file + Environment variable overrides.
+
+### Priority Order:
+
+1. **Environment Variables** (highest priority)
+2. **config.json** (fallback)
+3. **Default Values** (if neither is set)
+
+### Environment Variables:
+
+Copy `.env.example` to `.env` and adjust values:
+
+```bash
+# Server Configuration
+SERVER_PORT=8080
+SERVER_HOST=0.0.0.0
+
+# Database Configuration
+DB_HOST=localhost
+DB_PORT=5432
+DB_USER=postgres
+DB_PASSWORD=postgres
+DB_NAME=web_porto_cms
+DB_SSLMODE=disable
+
+# Redis Configuration
+REDIS_HOST=localhost
+REDIS_PORT=6379
+REDIS_PASSWORD=
+REDIS_DB=0
+
+# JWT Configuration
+JWT_SECRET=your-super-secret-jwt-key-change-this-in-production
+
+# Application Configuration
+APP_NAME=Web Porto CMS
+APP_VERSION=1.0.0
+APP_DEBUG=true
+
+# Analytics Configuration
+ANALYTICS_API_KEY=dev-analytics-key
+
+# Gin Mode
+GIN_MODE=debug  # or 'release' for production
+```
+
+### config.json Structure (Optional):
+
+If you prefer JSON configuration, create a `config.json` file:
+
 ### config.json Structure:
 
 ```json
@@ -351,6 +401,8 @@ JWT_SECRET=strong-random-secret
 - **SQL Injection Protection**: GORM ORM with prepared statements
 
 ## 🚀 Production Deployment
+
+### Using Environment Variables (Recommended):
 
 ### Environment Variables:
 
