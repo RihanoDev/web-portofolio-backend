@@ -80,6 +80,12 @@ func setupPublicRoutesWithRegistry(router *gin.RouterGroup, handlerRegistry *han
 		comments.GET("/:id", handlerRegistry.CommentHandler.GetByID)
 		comments.GET("/post/:postId", handlerRegistry.CommentHandler.GetByPost)
 	}
+
+	// Public settings paths
+	settings := router.Group("/settings")
+	{
+		settings.GET("", handlerRegistry.SettingHandler.GetAll)
+	}
 }
 
 // setupProtectedRoutesWithRegistry configures protected API routes using handler registry
@@ -124,5 +130,11 @@ func setupProtectedRoutesWithRegistry(router *gin.RouterGroup, handlerRegistry *
 		comments.POST("", handlerRegistry.CommentHandler.Create)
 		comments.PUT("/:id", handlerRegistry.CommentHandler.Update)
 		comments.DELETE("/:id", handlerRegistry.CommentHandler.Delete)
+	}
+
+	// Protected setting routes
+	settings := protected.Group("/settings")
+	{
+		settings.PUT("", handlerRegistry.SettingHandler.Update)
 	}
 }

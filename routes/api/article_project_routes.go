@@ -89,4 +89,20 @@ func SetupArticleProjectRoutes(router *gin.Engine, handlerRegistry *handlers.Han
 		tags.PUT("/:id", handlerRegistry.TagHandler.Update)
 		tags.DELETE("/:id", handlerRegistry.TagHandler.Delete)
 	}
+
+	// Media upload routes
+	if handlerRegistry.MediaHandler != nil {
+		// Public: list media
+		media := v1.Group("/media")
+		{
+			media.GET("", handlerRegistry.MediaHandler.GetAll)
+		}
+
+		// Protected: upload and delete
+		protectedMedia := protected.Group("/media")
+		{
+			protectedMedia.POST("/upload", handlerRegistry.MediaHandler.Upload)
+			protectedMedia.DELETE("/:id", handlerRegistry.MediaHandler.Delete)
+		}
+	}
 }

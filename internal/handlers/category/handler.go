@@ -36,11 +36,6 @@ func (h *Handler) GetAll(c *gin.Context) {
 	// Log the response for debugging
 	log.Printf("Categories fetched successfully, count: %d", len(categories))
 
-	// Set CORS headers explicitly for debugging
-	c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
-	c.Writer.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
-	c.Writer.Header().Set("Access-Control-Allow-Headers", "Origin, Content-Type, Authorization")
-
 	h.httpAdapter.SendSuccessResponse(c, http.StatusOK, categories, "")
 }
 

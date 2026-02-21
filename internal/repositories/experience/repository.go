@@ -1,6 +1,7 @@
 package experience
 
 import (
+	"fmt"
 	"web-porto-backend/internal/domain/models"
 
 	"gorm.io/gorm"
@@ -52,7 +53,11 @@ func (r *repository) GetAll(limit, offset int) ([]*models.Experience, int64, err
 }
 
 func (r *repository) Update(experience *models.Experience) error {
-	return r.db.Save(experience).Error
+	err := r.db.Save(experience).Error
+	if err != nil {
+		fmt.Printf("[ExperienceRepo.Update] GORM Save error for id=%d: %v\n", experience.ID, err)
+	}
+	return err
 }
 
 func (r *repository) Delete(id int) error {

@@ -210,9 +210,13 @@ func (s *Service) ListExperiences(page, size int) (*dto.PaginatedResponse, error
 
 // UpdateExperience updates an existing experience entry
 func (s *Service) UpdateExperience(id int, req dto.UpdateExperienceRequest) (*dto.ExperienceResponse, error) {
+	fmt.Printf("[UpdateExperience] Updating id=%d title=%q startDate=%q endDate=%q current=%v techs(ids)=%v techs(names)=%v\n",
+		id, req.Title, req.StartDate, req.EndDate, req.Current, req.TechnologyIDs, req.TechnologyNames)
+
 	// Get existing experience
 	experience, err := s.experienceRepo.GetByID(id)
 	if err != nil {
+		fmt.Printf("[UpdateExperience] GetByID error: %v\n", err)
 		return nil, err
 	}
 
@@ -229,7 +233,8 @@ func (s *Service) UpdateExperience(id int, req dto.UpdateExperienceRequest) (*dt
 	if req.StartDate != "" {
 		startDate, err := time.Parse("2006-01-02", req.StartDate)
 		if err != nil {
-			return nil, err
+			fmt.Printf("[UpdateExperience] startDate parse error: %v (input: %q)\n", err, req.StartDate)
+			return nil, fmt.Errorf("invalid startDate format (expected YYYY-MM-DD): %v", err)
 		}
 		experience.StartDate = startDate
 	}
@@ -245,7 +250,7 @@ func (s *Service) UpdateExperience(id int, req dto.UpdateExperienceRequest) (*dt
 			// If not current and end_date provided, update it
 			endDate, err := time.Parse("2006-01-02", req.EndDate)
 			if err != nil {
-				return nil, err
+				return nil, fmt.Errorf("invalid endDate format (expected YYYY-MM-DD): %v", err)
 			}
 			experience.EndDate = &endDate
 		}
@@ -253,7 +258,7 @@ func (s *Service) UpdateExperience(id int, req dto.UpdateExperienceRequest) (*dt
 		// If only end_date provided (current flag not changed)
 		endDate, err := time.Parse("2006-01-02", req.EndDate)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("invalid endDate format (expected YYYY-MM-DD): %v", err)
 		}
 		experience.EndDate = &endDate
 		experience.Current = false

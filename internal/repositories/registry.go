@@ -8,6 +8,7 @@ import (
 	experienceRepo "web-porto-backend/internal/repositories/experience"
 	pageRepo "web-porto-backend/internal/repositories/page"
 	projectRepo "web-porto-backend/internal/repositories/project"
+	settingRepo "web-porto-backend/internal/repositories/setting"
 	tagRepo "web-porto-backend/internal/repositories/tag"
 	userRepo "web-porto-backend/internal/repositories/user"
 
@@ -23,6 +24,7 @@ type RepositoryRegistry struct {
 	UserRepository       userRepo.Repository
 	PageRepository       pageRepo.Repository
 	ProjectRepository    projectRepo.Repository
+	SettingRepository    settingRepo.Repository
 	TagRepository        tagRepo.Repository
 }
 
@@ -36,6 +38,7 @@ func NewRepositoryRegistry(db *gorm.DB) *RepositoryRegistry {
 		UserRepository:       userRepo.NewRepository(db),
 		PageRepository:       pageRepo.NewRepository(db),
 		ProjectRepository:    projectRepo.NewRepository(db),
+		SettingRepository:    settingRepo.NewRepository(db),
 		TagRepository:        tagRepo.NewRepository(db),
 	}
 }
