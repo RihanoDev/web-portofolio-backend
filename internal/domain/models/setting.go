@@ -2,5 +2,5 @@ package models
 
 type Setting struct {
 	Key   string `gorm:"primaryKey"`
-	Value string
+	Value string `gorm:"type:text"`
 }
