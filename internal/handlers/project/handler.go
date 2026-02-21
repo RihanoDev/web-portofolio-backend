@@ -212,6 +212,10 @@ func (h *Handler) Update(c *gin.Context) {
 	// If not a temp ID, proceed with normal update
 	project, err := h.service.UpdateProject(id, req)
 	if err != nil {
+		if err.Error() == "record not found" {
+			c.JSON(http.StatusNotFound, response.NewErrorResponse(msgProjectNotFound, err.Error()))
+			return
+		}
 		c.JSON(http.StatusInternalServerError, response.NewErrorResponse("Failed to update project", err.Error()))
 		return
 	}
@@ -229,6 +233,10 @@ func (h *Handler) Delete(c *gin.Context) {
 
 	err := h.service.DeleteProject(id)
 	if err != nil {
+		if err.Error() == "record not found" {
+			c.JSON(http.StatusNotFound, response.NewErrorResponse(msgProjectNotFound, err.Error()))
+			return
+		}
 		c.JSON(http.StatusInternalServerError, response.NewErrorResponse("Failed to delete project", err.Error()))
 		return
 	}

@@ -29,6 +29,7 @@ func setupPublicRoutesWithRegistry(router *gin.RouterGroup, handlerRegistry *han
 		analytics.GET("/views", handlerRegistry.AnalyticsHandler.GetViews)
 		analytics.GET("", handlerRegistry.AnalyticsHandler.GetAnalytics)
 		analytics.GET("/series", handlerRegistry.AnalyticsHandler.GetSeries)
+		analytics.GET("/top-pages", handlerRegistry.AnalyticsHandler.GetTopPages)
 		analytics.POST("/track", handlerRegistry.AnalyticsHandler.Track)
 	}
 

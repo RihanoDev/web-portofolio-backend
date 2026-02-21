@@ -20,6 +20,7 @@ type Service interface {
 	GetStats(page string) (*ViewStats, error)
 	GetStatsWithFilter(page string, start, end *string, country string) (*ViewStats, error)
 	GetTimeSeries(page string, start, end string, interval string) ([]repo.TimeSeriesPoint, error)
+	GetTopPages(limit int) ([]repo.PageCount, error)
 	SetWebsocketManager(wsManager *websocket.Manager)
 }
 
@@ -114,4 +115,8 @@ func (s *service) GetTimeSeries(page, start, end, interval string) ([]repo.TimeS
 		return nil, err
 	}
 	return s.repo.GetTimeSeries(page, sT, eT, interval)
+}
+
+func (s *service) GetTopPages(limit int) ([]repo.PageCount, error) {
+	return s.repo.GetTopPages(limit)
 }

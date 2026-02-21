@@ -63,7 +63,7 @@ func (h *Handler) Create(c *gin.Context) {
 
 	experience, err := h.service.CreateExperience(req)
 	if err != nil {
-		h.httpAdapter.SendErrorResponse(c, http.StatusInternalServerError, "Failed to create experience")
+		h.httpAdapter.SendErrorResponse(c, http.StatusBadRequest, err.Error())
 		return
 	}
 
@@ -86,7 +86,11 @@ func (h *Handler) Update(c *gin.Context) {
 
 	experience, err := h.service.UpdateExperience(id, req)
 	if err != nil {
-		h.httpAdapter.SendErrorResponse(c, http.StatusInternalServerError, "Failed to update experience")
+		if err.Error() == "record not found" {
+			h.httpAdapter.SendErrorResponse(c, http.StatusNotFound, "Experience not found")
+			return
+		}
+		h.httpAdapter.SendErrorResponse(c, http.StatusBadRequest, err.Error())
 		return
 	}
 
@@ -103,6 +107,10 @@ func (h *Handler) Delete(c *gin.Context) {
 
 	err = h.service.DeleteExperience(id)
 	if err != nil {
+		if err.Error() == "record not found" {
+			h.httpAdapter.SendErrorResponse(c, http.StatusNotFound, "Experience not found")
+			return
+		}
 		h.httpAdapter.SendErrorResponse(c, http.StatusInternalServerError, "Failed to delete experience")
 		return
 	}

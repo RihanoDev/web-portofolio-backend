@@ -11,6 +11,7 @@ type Repository interface {
 	GetAll() ([]models.Tag, error)
 	GetByID(id int) (*models.Tag, error)
 	GetByName(name string) (*models.Tag, error)
+	GetBySlug(slug string) (*models.Tag, error)
 	Create(tag *models.Tag) (*models.Tag, error)
 	Update(tag *models.Tag) (*models.Tag, error)
 	Delete(id int) error
@@ -44,6 +45,14 @@ func (r *repository) GetByID(id int) (*models.Tag, error) {
 func (r *repository) GetByName(name string) (*models.Tag, error) {
 	var tag models.Tag
 	if err := r.db.Where("name = ?", name).First(&tag).Error; err != nil {
+		return nil, err
+	}
+	return &tag, nil
+}
+
+func (r *repository) GetBySlug(slug string) (*models.Tag, error) {
+	var tag models.Tag
+	if err := r.db.Where("slug = ?", slug).First(&tag).Error; err != nil {
 		return nil, err
 	}
 	return &tag, nil

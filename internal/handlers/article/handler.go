@@ -210,6 +210,10 @@ func (h *Handler) Update(c *gin.Context) {
 	// If not a temp ID, proceed with normal update
 	article, err := h.service.UpdateArticle(id, req)
 	if err != nil {
+		if err.Error() == "record not found" {
+			c.JSON(http.StatusNotFound, response.NewErrorResponse("Article not found", err.Error()))
+			return
+		}
 		c.JSON(http.StatusInternalServerError, response.NewErrorResponse("Failed to update article", err.Error()))
 		return
 	}
@@ -227,6 +231,10 @@ func (h *Handler) Delete(c *gin.Context) {
 
 	err := h.service.DeleteArticle(id)
 	if err != nil {
+		if err.Error() == "record not found" {
+			c.JSON(http.StatusNotFound, response.NewErrorResponse("Article not found", err.Error()))
+			return
+		}
 		c.JSON(http.StatusInternalServerError, response.NewErrorResponse("Failed to delete article", err.Error()))
 		return
 	}

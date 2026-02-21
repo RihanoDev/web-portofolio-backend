@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"time"
+	"web-porto-backend/common/utils"
 	"web-porto-backend/internal/domain/dto"
 	"web-porto-backend/internal/domain/models"
 	experienceRepo "web-porto-backend/internal/repositories/experience"
@@ -35,6 +36,24 @@ func getStringArray(data map[string]interface{}, key string) []string {
 	return []string{}
 }
 
+// parseFlexibleDate tries multiple date formats
+func parseFlexibleDate(dateStr string) (time.Time, error) {
+	formats := []string{
+		"2006-01-02",
+		"2006-01",
+		"2006/01/02",
+		"2006/01",
+	}
+
+	for _, format := range formats {
+		if t, err := time.Parse(format, dateStr); err == nil {
+			return t, nil
+		}
+	}
+
+	return time.Time{}, fmt.Errorf("invalid date format: %s", dateStr)
+}
+
 type Service struct {
 	experienceRepo experienceRepo.Repository
 	tagService     tagService.Service
@@ -59,19 +78,41 @@ func (s *Service) convertTechnologyNamesToIDs(technologyNames []string) ([]int, 
 			continue // Skip empty names
 		}
 
-		tag, err := s.tagService.GetByName(name)
-		if err != nil {
+		// Try to find by slug first as it's the unique identifier most likely to conflict
+		slug := utils.StringToSlug(name)
+		var existingTag *dto.TagResponse
+
+		// Attempt to find by name exactly first
+		tag, err := s.tagService.GetBySlug(slug)
+		if err == nil {
+			existingTag = tag
+		} else {
+			// If not found by slug, it's safe to try creating it
+			fmt.Printf("[ExperienceService] Tag slug '%s' not found, will attempt to create\n", slug)
+		}
+
+		if existingTag != nil {
+			technologyIDs = append(technologyIDs, existingTag.ID)
+		} else {
 			// If tag doesn't exist, create it
 			createReq := &dto.CreateTagRequest{
 				Name: name,
+				Slug: slug,
 			}
 			newTag, err := s.tagService.Create(createReq)
 			if err != nil {
-				return nil, fmt.Errorf("failed to create tag '%s': %v", name, err)
+				// Final attempt: maybe it was created by another process in the meantime?
+				// Or check if it exists by name just in case slugify logic differs
+				tag, errRetry := s.tagService.GetByName(name)
+				if errRetry == nil {
+					technologyIDs = append(technologyIDs, tag.ID)
+					continue
+				}
+
+				fmt.Printf("[ExperienceService] Failed to create tag '%s' (slug: %s): %v\n", name, slug, err)
+				return nil, fmt.Errorf("failed to handle technology '%s': %v", name, err)
 			}
 			technologyIDs = append(technologyIDs, newTag.ID)
-		} else {
-			technologyIDs = append(technologyIDs, tag.ID)
 		}
 	}
 
@@ -96,17 +137,28 @@ func (s *Service) resolveTechnologies(technologies []int, technologyNames []stri
 
 // CreateExperience creates a new work experience entry
 func (s *Service) CreateExperience(req dto.CreateExperienceRequest) (*dto.ExperienceResponse, error) {
+	// Validate required fields
+	if req.Title == "" {
+		return nil, fmt.Errorf("title is required")
+	}
+	if req.Company == "" {
+		return nil, fmt.Errorf("company is required")
+	}
+	if req.StartDate == "" {
+		return nil, fmt.Errorf("startDate is required")
+	}
+
 	// Parse dates
-	startDate, err := time.Parse("2006-01-02", req.StartDate)
+	startDate, err := parseFlexibleDate(req.StartDate)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("invalid startDate format: %v", err)
 	}
 
 	var endDate *time.Time
 	if req.EndDate != "" && !req.Current {
-		parsedEndDate, err := time.Parse("2006-01-02", req.EndDate)
+		parsedEndDate, err := parseFlexibleDate(req.EndDate)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("invalid endDate format: %v", err)
 		}
 		endDate = &parsedEndDate
 	}
@@ -147,24 +199,29 @@ func (s *Service) CreateExperience(req dto.CreateExperienceRequest) (*dto.Experi
 
 	// Create the experience
 	if err := s.experienceRepo.Create(experience); err != nil {
-		return nil, err
+		fmt.Printf("[ExperienceService.Create] Repository error: %v\n", err)
+		return nil, fmt.Errorf("database error: %v", err)
 	}
 
 	// Handle technologies if provided
 	if len(req.TechnologyIDs) > 0 || len(req.TechnologyNames) > 0 {
+		fmt.Printf("[ExperienceService.Create] Resolving technologies: IDs=%v, Names=%v\n", req.TechnologyIDs, req.TechnologyNames)
 		// Resolve technology IDs from either IDs or names
 		technologyIDs, err := s.resolveTechnologies(req.TechnologyIDs, req.TechnologyNames)
 		if err != nil {
+			fmt.Printf("[ExperienceService.Create] Resolution error: %v\n", err)
 			return nil, fmt.Errorf("failed to resolve technologies: %v", err)
 		}
 
 		// Update experience technologies
 		if err := s.experienceRepo.UpdateExperienceTechnologies(experience.ID, technologyIDs); err != nil {
+			fmt.Printf("[ExperienceService.Create] Association error: %v\n", err)
 			return nil, fmt.Errorf("failed to update experience technologies: %v", err)
 		}
 	}
 
 	// Return response
+	fmt.Printf("[ExperienceService.Create] Successfully created experience ID %d\n", experience.ID)
 	return s.mapToResponse(experience), nil
 }
 
@@ -231,10 +288,10 @@ func (s *Service) UpdateExperience(id int, req dto.UpdateExperienceRequest) (*dt
 		experience.Location = req.Location
 	}
 	if req.StartDate != "" {
-		startDate, err := time.Parse("2006-01-02", req.StartDate)
+		startDate, err := parseFlexibleDate(req.StartDate)
 		if err != nil {
 			fmt.Printf("[UpdateExperience] startDate parse error: %v (input: %q)\n", err, req.StartDate)
-			return nil, fmt.Errorf("invalid startDate format (expected YYYY-MM-DD): %v", err)
+			return nil, fmt.Errorf("invalid startDate format: %v", err)
 		}
 		experience.StartDate = startDate
 	}
@@ -248,17 +305,17 @@ func (s *Service) UpdateExperience(id int, req dto.UpdateExperienceRequest) (*dt
 			experience.EndDate = nil
 		} else if req.EndDate != "" {
 			// If not current and end_date provided, update it
-			endDate, err := time.Parse("2006-01-02", req.EndDate)
+			endDate, err := parseFlexibleDate(req.EndDate)
 			if err != nil {
-				return nil, fmt.Errorf("invalid endDate format (expected YYYY-MM-DD): %v", err)
+				return nil, fmt.Errorf("invalid endDate format: %v", err)
 			}
 			experience.EndDate = &endDate
 		}
 	} else if req.EndDate != "" {
 		// If only end_date provided (current flag not changed)
-		endDate, err := time.Parse("2006-01-02", req.EndDate)
+		endDate, err := parseFlexibleDate(req.EndDate)
 		if err != nil {
-			return nil, fmt.Errorf("invalid endDate format (expected YYYY-MM-DD): %v", err)
+			return nil, fmt.Errorf("invalid endDate format: %v", err)
 		}
 		experience.EndDate = &endDate
 		experience.Current = false
