@@ -16,6 +16,8 @@ FROM alpine:3.20
 WORKDIR /app
 RUN adduser -D -H app && apk add --no-cache ca-certificates tzdata && update-ca-certificates
 COPY --from=builder /out/web-porto-backend /app/web-porto-backend
+# Create log directory with proper permissions
+RUN mkdir -p /app/log && chown -R app:app /app
 # Expect config.json to be mounted into /app/config.json
 ENV GIN_MODE=release
 EXPOSE 8080
