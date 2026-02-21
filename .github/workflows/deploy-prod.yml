@@ -41,6 +41,8 @@ jobs:
         with:
           context: .
           push: true
+          build-args: |
+            PORT=${{ env.PROD_PORT }}
           tags: |
             ${{ env.IMAGE_NAME }}:latest
             ${{ env.IMAGE_NAME }}:${{ steps.extract_version.outputs.VERSION }}
@@ -86,15 +88,10 @@ jobs:
             docker run -d \
               --name web-porto-backend-prod \
               --restart unless-stopped \
-              -p ${{ env.PROD_PORT }}:8080 \
+              -p ${{ env.PROD_PORT }}:${{ env.PROD_PORT }} \
               -e GIN_MODE=release \
               -e APP_DEBUG=false \
-              -e SERVER_PORT=8080 \
-              -e DB_HOST=${{ secrets.DB_HOST }} \
-              -e DB_PORT=${{ secrets.DB_PORT }} \
-              -e DB_USER=${{ secrets.DB_USER }} \
-              -e DB_PASSWORD=${{ secrets.DB_PASSWORD }} \
-              -e DB_NAME=${{ secrets.DB_NAME }} \              
+              -e SERVER_PORT=${{ env.PROD_PORT }} \
               -e REDIS_HOST=${{ secrets.REDIS_HOST }} \
               -e REDIS_PORT=${{ secrets.REDIS_PORT }} \
               -e REDIS_PASSWORD=${{ secrets.REDIS_PASSWORD }} \
