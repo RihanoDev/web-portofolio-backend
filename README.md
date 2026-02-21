@@ -337,6 +337,8 @@ GIN_MODE=debug  # or 'release' for production
 
 If you prefer JSON configuration, create a `config.json` file:
 
+### config.json Structure:
+
 ```json
 {
   "server": {
@@ -402,66 +404,22 @@ JWT_SECRET=strong-random-secret
 
 ### Using Environment Variables (Recommended):
 
-Set environment variables in your deployment platform (Docker, Kubernetes, systemd):
+### Environment Variables:
+
+For production, consider using environment variables instead of config.json:
 
 ```bash
-# Essential Production Variables
+export DB_HOST=your-production-db-host
+export DB_PASSWORD=your-production-password
+export JWT_SECRET=your-production-jwt-secret
 export GIN_MODE=release
-export APP_DEBUG=false
-export SERVER_PORT=8080
-export DB_HOST=your-production-db-host.com
-export DB_PORT=5432
-export DB_USER=your-db-user
-export DB_PASSWORD=your-strong-db-password
-export DB_NAME=web_porto_cms
-export JWT_SECRET=your-production-jwt-secret-min-32-chars
-export REDIS_HOST=your-redis-host
-export ANALYTICS_API_KEY=your-analytics-key
-```
-
-### Docker Deployment:
-
-**Production (Port 1200):**
-
-```bash
-docker run -d \
-  --name web-porto-backend-prod \
-  --restart unless-stopped \
-  -p 1200:8080 \
-  -e GIN_MODE=release \
-  -e APP_DEBUG=false \
-  -e SERVER_PORT=8080 \
-  -e DB_HOST=production-db.example.com \
-  -e DB_USER=postgres \
-  -e DB_PASSWORD=strong-password \
-  -e DB_NAME=web_porto_cms \
-  -e JWT_SECRET=your-jwt-secret \
-  rihanodev/web-porto-backend:latest
-```
-
-**Development (Port 2200):**
-
-```bash
-docker run -d \
-  --name web-porto-backend-dev \
-  --restart unless-stopped \
-  -p 2200:8080 \
-  -e GIN_MODE=debug \
-  -e APP_DEBUG=true \
-  -e SERVER_PORT=8080 \
-  -e DB_HOST=dev-db.example.com \
-  -e DB_USER=postgres \
-  -e DB_PASSWORD=dev-password \
-  -e DB_NAME=web_porto_cms_dev \
-  -e JWT_SECRET=dev-jwt-secret \
-  rihanodev/web-porto-backend:dev-latest
 ```
 
 ### Build for Production:
 
 ```bash
-go build -o web-porto-cms main.go
-./web-porto-cms
+go build -o web-porto-backend main.go
+./web-porto-backend
 ```
 
 ## 🤝 Contributing
