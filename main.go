@@ -94,7 +94,34 @@ func main() {
 
 	// Add CORS middleware with specific origins for development and production
 	router.Use(cors.New(cors.Config{
-		AllowOrigins:     []string{"*"}, // Development URLs
+		AllowOrigins: []string{
+			// Production domains
+			"https://rihanodev.com",
+			"https://www.rihanodev.com",
+			"https://cms.rihanodev.com",
+			"https://api.rihanodev.com",
+			// Development domains
+			"https://dev.rihanodev.com",
+			"https://cms-dev.rihanodev.com",
+			"https://api-dev.rihanodev.com",
+			// Server IP (various ports)
+			"http://103.59.95.108",
+			"http://103.59.95.108:1200",  // prod BE
+			"http://103.59.95.108:1500",  // prod FE
+			"http://103.59.95.108:1600",  // prod CMS
+			"http://103.59.95.108:2200",  // dev BE
+			"http://103.59.95.108:2500",  // dev FE
+			"http://103.59.95.108:2600",  // dev CMS
+			// Localhost for local development
+			"http://localhost:3000",
+			"http://localhost:5173",      // Vite default
+			"http://localhost:5174",
+			"http://localhost:8080",
+			"http://127.0.0.1:3000",
+			"http://127.0.0.1:5173",
+			"http://127.0.0.1:5174",
+			"http://127.0.0.1:8080",
+		},
 		AllowMethods:     []string{"GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"},
 		AllowHeaders:     []string{"Origin", "Content-Type", "Accept", "Authorization", "X-API-Key", "X-Requested-With", "Sec-WebSocket-Protocol", "Sec-WebSocket-Version", "Sec-WebSocket-Key", "Upgrade", "Connection"},
 		ExposeHeaders:    []string{"Content-Length", "Content-Type", "Upgrade", "Connection"},
