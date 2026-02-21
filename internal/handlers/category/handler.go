@@ -1,6 +1,7 @@
 ﻿package category
 
 import (
+	"log"
 	"net/http"
 	httpAdapter "web-porto-backend/internal/adapters/http"
 	"web-porto-backend/internal/domain/models"
@@ -22,11 +23,24 @@ func NewHandler(service category.Service) *Handler {
 }
 
 func (h *Handler) GetAll(c *gin.Context) {
+	// Log the request for debugging
+	log.Printf("GetAll categories request received")
+
 	categories, err := h.service.GetAll()
 	if err != nil {
+		log.Printf("Error fetching categories: %v", err)
 		h.httpAdapter.SendErrorResponse(c, http.StatusInternalServerError, err.Error())
 		return
 	}
+
+	// Log the response for debugging
+	log.Printf("Categories fetched successfully, count: %d", len(categories))
+
+	// Set CORS headers explicitly for debugging
+	c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
+	c.Writer.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+	c.Writer.Header().Set("Access-Control-Allow-Headers", "Origin, Content-Type, Authorization")
+
 	h.httpAdapter.SendSuccessResponse(c, http.StatusOK, categories, "")
 }
 
@@ -53,17 +67,29 @@ func (h *Handler) Create(c *gin.Context) {
 		return
 	}
 
+	// Validate required fields
+	if category.Name == "" {
+		h.httpAdapter.SendValidationErrorResponse(c, "Name is required")
+		return
+	}
+
+	// Log category data for debugging
+	log.Printf("Creating category: %+v", category)
+
 	if err := h.service.Create(&category); err != nil {
+		log.Printf("Error creating category: %v", err)
 		h.httpAdapter.SendErrorResponse(c, http.StatusInternalServerError, err.Error())
 		return
 	}
 
+	log.Printf("Category created successfully: %+v", category)
 	h.httpAdapter.SendSuccessResponse(c, http.StatusCreated, category, "Category created successfully")
 }
 
 func (h *Handler) Update(c *gin.Context) {
 	id, err := h.httpAdapter.ParseIntIDParam(c, "id")
 	if err != nil {
+		log.Printf("Invalid ID parameter: %v", err)
 		h.httpAdapter.SendErrorResponse(c, http.StatusBadRequest, "invalid id")
 		return
 	}
@@ -74,12 +100,23 @@ func (h *Handler) Update(c *gin.Context) {
 		return
 	}
 
+	// Validate required fields
+	if category.Name == "" {
+		h.httpAdapter.SendValidationErrorResponse(c, "Name is required")
+		return
+	}
+
+	// Log category data for debugging
+	log.Printf("Updating category %d: %+v", id, category)
+
 	category.ID = id
 	if err := h.service.Update(&category); err != nil {
+		log.Printf("Error updating category: %v", err)
 		h.httpAdapter.SendErrorResponse(c, http.StatusInternalServerError, err.Error())
 		return
 	}
 
+	log.Printf("Category updated successfully: %+v", category)
 	h.httpAdapter.SendSuccessResponse(c, http.StatusOK, category, "Category updated successfully")
 }
 

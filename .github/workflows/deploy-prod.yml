@@ -1,0 +1,145 @@
+name: Deploy Backend API to Production
+
+on:
+  push:
+    tags:
+      - "v*" # Trigger when tag starts with 'v' (e.g., v1.0.0, v2.1.3)
+    branches:
+      - main # Ensure tag is created from main branch
+
+env:
+  REGISTRY: docker.io
+  IMAGE_NAME: rihanodev/web-porto-backend
+  PROD_PORT: 1200
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Extract tag version
+        id: extract_version
+        run: |
+          echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+          echo "SHORT_SHA=${GITHUB_SHA::8}" >> $GITHUB_OUTPUT
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: |
+            ${{ env.IMAGE_NAME }}:${{ steps.extract_version.outputs.VERSION }}
+            ${{ env.IMAGE_NAME }}:latest
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.version=${{ steps.extract_version.outputs.VERSION }}
+            org.opencontainers.image.revision=${{ github.sha }}
+
+      - name: Deploy to production server
+        if: github.ref_type == 'tag'
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.PROD_SERVER_HOST }}
+          username: ${{ secrets.PROD_SERVER_USER }}
+          key: ${{ secrets.PROD_SERVER_SSH_KEY }}
+          script: |
+            echo "🚀 Starting PRODUCTION deployment of Backend API ${{ steps.extract_version.outputs.VERSION }}..."
+            echo "📌 Port: ${{ env.PROD_PORT }}"
+
+            # Check port usage
+            echo "🔍 Checking port ${{ env.PROD_PORT }} usage..."
+            sudo netstat -tlnp | grep :${{ env.PROD_PORT }} || true
+            sudo lsof -i :${{ env.PROD_PORT }} || true
+
+            # Kill any processes using the port
+            sudo fuser -k ${{ env.PROD_PORT }}/tcp || true
+
+            # Pull latest image
+            echo "📦 Pulling Docker image..."
+            docker pull ${{ env.IMAGE_NAME }}:${{ steps.extract_version.outputs.VERSION }}
+
+            # Stop and remove existing container
+            echo "🔄 Managing existing containers..."
+            docker stop web-porto-backend-prod || true
+            docker rm web-porto-backend-prod || true
+
+            # Wait for port to be freed
+            sleep 5
+
+            # Prepare config file if provided
+            if [ -n "${{ secrets.API_CONFIG_JSON_B64 }}" ]; then
+              echo "📝 Creating config file..."
+              mkdir -p ~/web-porto-backend
+              echo "${{ secrets.API_CONFIG_JSON_B64 }}" | base64 -d > ~/web-porto-backend/config.json
+            fi
+
+            # Run new container
+            echo "🚀 Starting new production container..."
+            docker run -d \
+              --name web-porto-backend-prod \
+              --restart unless-stopped \
+              -p ${{ env.PROD_PORT }}:8080 \
+              -e GIN_MODE=release \
+              -e APP_DEBUG=false \
+              -e SERVER_PORT=8080 \
+              -e DB_HOST=${{ secrets.PROD_DB_HOST }} \
+              -e DB_PORT=${{ secrets.PROD_DB_PORT }} \
+              -e DB_USER=${{ secrets.PROD_DB_USER }} \
+              -e DB_PASSWORD=${{ secrets.PROD_DB_PASSWORD }} \
+              -e DB_NAME=${{ secrets.PROD_DB_NAME }} \
+              -e JWT_SECRET=${{ secrets.JWT_SECRET }} \
+              -v ~/web-porto-backend/config.json:/app/config.json:ro \
+              ${{ env.IMAGE_NAME }}:${{ steps.extract_version.outputs.VERSION }}
+
+            # Wait for container to start
+            echo "⏳ Waiting for container to start..."
+            sleep 10
+
+            # Check container status
+            echo "📊 Container status:"
+            docker ps | grep web-porto-backend-prod || echo "⚠️  Container not running!"
+
+            echo "📋 Container logs (last 30 lines):"
+            docker logs web-porto-backend-prod --tail 30 || true
+
+            # Test if port is responding
+            echo "🌐 Testing API response on port ${{ env.PROD_PORT }}..."
+            timeout 30 bash -c 'until curl -f http://localhost:${{ env.PROD_PORT }}/health >/dev/null 2>&1; do sleep 2; echo "Waiting for API..."; done' || echo "⚠️  API health check timed out"
+
+            # Additional debugging
+            echo "🔍 Additional verification:"
+            echo "1. API Health check:"
+            curl -s http://localhost:${{ env.PROD_PORT }}/health || true
+
+            echo "2. Container network info:"
+            docker inspect web-porto-backend-prod --format='{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' || true
+
+            echo "3. Container environment:"
+            docker exec web-porto-backend-prod env | grep -E 'GIN_MODE|PORT' || true
+
+            echo "4. Port binding:"
+            docker port web-porto-backend-prod || true
+
+            echo "5. Config file check:"
+            docker exec web-porto-backend-prod ls -la /app/config.json || true
+
+            echo "✅ Production deployment completed!"
+            echo "🌐 API Endpoint (internal): http://localhost:${{ env.PROD_PORT }}"
+            echo "📦 Image: ${{ env.IMAGE_NAME }}:${{ steps.extract_version.outputs.VERSION }}"
+
+            # Clean up old images (keep last 3 versions)
+            echo "🧹 Cleaning up old images..."
+            docker images ${{ env.IMAGE_NAME }} --format "{{.ID}} {{.Tag}}" | grep -v latest | tail -n +4 | awk '{print $1}' | xargs -r docker rmi || true

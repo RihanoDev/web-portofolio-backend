@@ -16,6 +16,9 @@ func SetupAPIRoutes(router *gin.Engine, handlerRegistry *handlers.HandlerRegistr
 	// Setup routes using handler registry
 	setupPublicRoutesWithRegistry(v1, handlerRegistry)
 	setupProtectedRoutesWithRegistry(v1, handlerRegistry, authService)
+
+	// Setup article and project routes
+	SetupArticleProjectRoutes(router, handlerRegistry, authService)
 }
 
 // setupPublicRoutesWithRegistry configures public API routes using handler registry
@@ -26,6 +29,15 @@ func setupPublicRoutesWithRegistry(router *gin.RouterGroup, handlerRegistry *han
 		analytics.GET("/views", handlerRegistry.AnalyticsHandler.GetViews)
 		analytics.GET("", handlerRegistry.AnalyticsHandler.GetAnalytics)
 		analytics.GET("/series", handlerRegistry.AnalyticsHandler.GetSeries)
+		analytics.POST("/track", handlerRegistry.AnalyticsHandler.Track)
+	}
+
+	// Content view tracking routes
+	views := router.Group("/views")
+	{
+		views.POST("/track", handlerRegistry.AnalyticsHandler.TrackContentView)
+		views.GET("/count", handlerRegistry.AnalyticsHandler.GetContentViewCount)
+		views.GET("/analytics", handlerRegistry.AnalyticsHandler.GetContentViewAnalytics)
 	}
 
 	// Authentication routes
@@ -112,13 +124,5 @@ func setupProtectedRoutesWithRegistry(router *gin.RouterGroup, handlerRegistry *
 		comments.POST("", handlerRegistry.CommentHandler.Create)
 		comments.PUT("/:id", handlerRegistry.CommentHandler.Update)
 		comments.DELETE("/:id", handlerRegistry.CommentHandler.Delete)
-	}
-
-	// Protected analytics routes (admin view)
-	analytics := protected.Group("/analytics")
-	{
-		analytics.GET("/views", handlerRegistry.AnalyticsHandler.GetViews)
-		analytics.GET("", handlerRegistry.AnalyticsHandler.GetAnalytics)
-		analytics.GET("/series", handlerRegistry.AnalyticsHandler.GetSeries)
 	}
 }

@@ -8,10 +8,10 @@ import (
 
 type Repository interface {
 	Create(post *models.Post) error
-	GetByID(id uint) (*models.Post, error)
+	GetByID(id string) (*models.Post, error)
 	GetAll(limit, offset int) ([]*models.Post, int64, error)
 	Update(post *models.Post) error
-	Delete(id uint) error
+	Delete(id string) error
 	GetBySlug(slug string) (*models.Post, error)
 	GetByAuthorID(authorID int, limit, offset int) ([]*models.Post, int64, error)
 	GetPublished(limit, offset int) ([]*models.Post, int64, error)
@@ -29,9 +29,9 @@ func (r *repository) Create(post *models.Post) error {
 	return r.db.Create(post).Error
 }
 
-func (r *repository) GetByID(id uint) (*models.Post, error) {
+func (r *repository) GetByID(id string) (*models.Post, error) {
 	var post models.Post
-	err := r.db.Preload("Author").First(&post, id).Error
+	err := r.db.Preload("Author").Where("id = ?", id).First(&post).Error
 	if err != nil {
 		return nil, err
 	}
@@ -56,8 +56,8 @@ func (r *repository) Update(post *models.Post) error {
 	return r.db.Save(post).Error
 }
 
-func (r *repository) Delete(id uint) error {
-	return r.db.Delete(&models.Post{}, id).Error
+func (r *repository) Delete(id string) error {
+	return r.db.Where("id = ?", id).Delete(&models.Post{}).Error
 }
 
 func (r *repository) GetBySlug(slug string) (*models.Post, error) {

@@ -1,0 +1,136 @@
+name: Deploy Backend API to Development
+
+on:
+  push:
+    branches:
+      - development
+
+env:
+  REGISTRY: docker.io
+  IMAGE_NAME: rihanodev/web-porto-backend
+  DEV_PORT: 2200
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Get commit info
+        id: commit_info
+        run: |
+          echo "SHORT_SHA=${GITHUB_SHA::8}" >> $GITHUB_OUTPUT
+          echo "COMMIT_MSG=$(git log -1 --pretty=%B)" >> $GITHUB_OUTPUT
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: |
+            ${{ env.IMAGE_NAME }}:dev-latest
+            ${{ env.IMAGE_NAME }}:dev-${{ steps.commit_info.outputs.SHORT_SHA }}
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.version=dev-${{ steps.commit_info.outputs.SHORT_SHA }}
+            org.opencontainers.image.revision=${{ github.sha }}
+
+      - name: Deploy to development server
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.DEV_SERVER_HOST }}
+          username: ${{ secrets.DEV_SERVER_USER }}
+          key: ${{ secrets.DEV_SERVER_SSH_KEY }}
+          script: |
+            echo "🚀 Starting deployment to Backend API DEVELOPMENT (Port ${{ env.DEV_PORT }})..."
+            echo "📝 Commit: ${{ steps.commit_info.outputs.SHORT_SHA }}"
+
+            # Check port usage
+            echo "🔍 Checking port ${{ env.DEV_PORT }} usage..."
+            sudo netstat -tlnp | grep :${{ env.DEV_PORT }} || true
+
+            # Stop any services using the port
+            echo "🛑 Freeing port ${{ env.DEV_PORT }}..."
+            sudo fuser -k ${{ env.DEV_PORT }}/tcp || true
+            sleep 3
+
+            # Pull latest dev image
+            echo "📦 Pulling Docker image..."
+            docker pull ${{ env.IMAGE_NAME }}:dev-latest
+
+            # Stop and remove existing container
+            echo "🔄 Managing existing containers..."
+            docker stop web-porto-backend-dev || true
+            docker rm web-porto-backend-dev || true
+
+            # Wait for port to be freed
+            sleep 5
+
+            # Prepare config file if provided
+            if [ -n "${{ secrets.DEV_API_CONFIG_JSON_B64 }}" ]; then
+              echo "📝 Creating dev config file..."
+              mkdir -p ~/web-porto-backend-dev
+              echo "${{ secrets.DEV_API_CONFIG_JSON_B64 }}" | base64 -d > ~/web-porto-backend-dev/config.json
+            fi
+
+            # Run new container
+            echo "🚀 Starting new development container..."
+            docker run -d \
+              --name web-porto-backend-dev \
+              --restart unless-stopped \
+              -p ${{ env.DEV_PORT }}:8080 \
+              -e GIN_MODE=debug \
+              -e APP_DEBUG=true \
+              -e SERVER_PORT=8080 \
+              -e DB_HOST=${{ secrets.DEV_DB_HOST }} \
+              -e DB_PORT=${{ secrets.DEV_DB_PORT }} \
+              -e DB_USER=${{ secrets.DEV_DB_USER }} \
+              -e DB_PASSWORD=${{ secrets.DEV_DB_PASSWORD }} \
+              -e DB_NAME=${{ secrets.DEV_DB_NAME }} \
+              -e JWT_SECRET=${{ secrets.JWT_SECRET }} \
+              -v ~/web-porto-backend-dev/config.json:/app/config.json:ro \
+              ${{ env.IMAGE_NAME }}:dev-latest
+
+            # Wait for container to start
+            echo "⏳ Waiting for container to start..."
+            sleep 10
+
+            # Check container status
+            echo "📊 Container status:"
+            docker ps | grep web-porto-backend-dev || echo "Container not running!"
+
+            echo "📋 Container logs (last 30 lines):"
+            docker logs web-porto-backend-dev --tail 30 || true
+
+            # Test API response
+            echo "🌐 Testing API response on port ${{ env.DEV_PORT }}..."
+            timeout 30 bash -c 'until curl -f http://localhost:${{ env.DEV_PORT }}/health >/dev/null 2>&1; do sleep 2; echo "Waiting for API..."; done' || echo "⚠️  API health check timed out"
+
+            # Additional verification
+            echo "🔍 Verification:"
+            echo "1. Health check:"
+            curl -s http://localhost:${{ env.DEV_PORT }}/health || true
+
+            echo "2. Port binding:"
+            docker port web-porto-backend-dev || true
+
+            echo "3. Config file:"
+            docker exec web-porto-backend-dev ls -la /app/config.json || true
+
+            echo "✅ Backend API Development deployment completed!"
+            echo "🌐 DEV API: http://$(curl -s ifconfig.me || echo 'your-dev-server'):${{ env.DEV_PORT }}"
+
+            # Clean up old dev images (keep last 3)
+            echo "🧹 Cleaning up old images..."
+            docker images ${{ env.IMAGE_NAME }} --format "{{.ID}} {{.Tag}}" | grep "dev-" | tail -n +4 | awk '{print $1}' | xargs -r docker rmi || true

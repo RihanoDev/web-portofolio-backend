@@ -5,14 +5,17 @@ import (
 	"log"
 	"strconv"
 	"time"
+	appLogger "web-porto-backend/common/logger"
 	"web-porto-backend/config"
-	"web-porto-backend/internal/adapters/http"
+	httpAdapter "web-porto-backend/internal/adapters/http"
+	"web-porto-backend/internal/adapters/websocket"
 	"web-porto-backend/internal/auth"
 	"web-porto-backend/internal/domain/models"
 	"web-porto-backend/internal/handlers"
 	"web-porto-backend/internal/migrations"
 	"web-porto-backend/internal/repositories"
 	"web-porto-backend/internal/services"
+	analyticsSrvc "web-porto-backend/internal/services/analytics"
 	"web-porto-backend/middleware"
 	"web-porto-backend/routes"
 
@@ -26,6 +29,15 @@ import (
 func main() {
 	// Load configuration
 	cfg := config.LoadConfig()
+
+	// Setup application logger
+	var baseLogger appLogger.Logger
+	if cfg.App.Debug {
+		baseLogger = appLogger.NewDevelopmentLogger()
+	} else {
+		baseLogger = appLogger.NewProductionLogger()
+	}
+	appLogger.SetDefaultLogger(baseLogger)
 
 	// Database connection
 	dsn := fmt.Sprintf("host=%s user=%s password=%s dbname=%s port=%d sslmode=disable TimeZone=Asia/Jakarta",
@@ -52,58 +64,53 @@ func main() {
 		log.Fatal("Failed running migrations:", err)
 	}
 
+	// Seed initial data (admin user) for development
+	if err := migrations.Seed(db); err != nil {
+		log.Fatal("Failed seeding data:", err)
+	}
+
 	// Initialize layers
 	repositoryRegistry := repositories.NewRepositoryRegistry(db)
 	serviceRegistry := services.NewServiceRegistry(repositoryRegistry)
 	authService := auth.NewAuthService(cfg.JWT.Secret)
 
-	// Initialize HTTP adapter
-	httpAdapter := http.NewHTTPAdapter()
+	// Initialize WebSocket manager
+	wsManager := websocket.NewManager()
+	go wsManager.Start() // Start WebSocket manager in a goroutine
 
-	handlerRegistry := handlers.NewHandlerRegistry(serviceRegistry, authService, httpAdapter) // Setup Gin router
+	// Initialize HTTP adapter
+	httpAdpt := httpAdapter.NewHTTPAdapter()
+
+	// Connect WebSocket manager to analytics service
+	analyticsService, ok := serviceRegistry.AnalyticsService.(analyticsSrvc.Service)
+	if ok {
+		analyticsService.SetWebsocketManager(wsManager)
+	} else {
+		log.Println("Warning: Could not connect WebSocket manager to analytics service")
+	}
+
+	handlerRegistry := handlers.NewHandlerRegistry(serviceRegistry, authService, httpAdpt) // Setup Gin router
 	router := gin.Default()
 
-	// Add CORS middleware
+	// Add CORS middleware with specific origins for development and production
 	router.Use(cors.New(cors.Config{
-		AllowOrigins: []string{
-			"http://localhost:3000",
-			"http://localhost:8080",
-			"http://localhost:5173",
-			"http://localhost:5174",
-			"https://api.rihanodev.com",
-			"https://cms.rihanodev.com",
-			"https://rihanodev.com",
-			"https://www.rihanodev.com",
-		},
-		AllowMethods:     []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
-		AllowHeaders:     []string{"Origin", "Content-Type", "Accept", "Authorization", "X-API-Key"},
-		ExposeHeaders:    []string{"Content-Length"},
-		AllowCredentials: true,
+		AllowOrigins:     []string{"*"}, // Development URLs
+		AllowMethods:     []string{"GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"},
+		AllowHeaders:     []string{"Origin", "Content-Type", "Accept", "Authorization", "X-API-Key", "X-Requested-With", "Sec-WebSocket-Protocol", "Sec-WebSocket-Version", "Sec-WebSocket-Key", "Upgrade", "Connection"},
+		ExposeHeaders:    []string{"Content-Length", "Content-Type", "Upgrade", "Connection"},
+		AllowCredentials: true, // Enable credentials for auth
+		MaxAge:           12 * time.Hour,
 	}))
 
-	// Add logging middleware
+	// Add logging middleware (use logrus for HTTP access logs)
 	logger := logrus.New()
 	router.Use(middleware.Logger(logger))
 
-	// Register routes using the new routes structure
+	// Register API routes
 	routes.SetupRoutes(router, handlerRegistry, authService)
 
-	// Register analytics track route with API key + rate limiting if API key configured
-	if cfg.Analytics.APIKey != "" {
-		router.POST(
-			"/api/v1/analytics/track",
-			middleware.APIKeyAuth(cfg),
-			middleware.RateLimit(10, 10*time.Second),
-			handlerRegistry.AnalyticsHandler.Track,
-		)
-	} else {
-		// Without API key, still apply a rate limit to be safe
-		router.POST(
-			"/api/v1/analytics/track",
-			middleware.RateLimit(10, 10*time.Second),
-			handlerRegistry.AnalyticsHandler.Track,
-		)
-	}
+	// Register WebSocket routes
+	routes.SetupWebSocketRoutes(router, wsManager)
 
 	// Start server
 	port := strconv.Itoa(cfg.Server.Port)

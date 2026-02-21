@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"time"
 
 	"gorm.io/gorm"
@@ -73,8 +74,22 @@ func applyMigrationFile(db *gorm.DB, filename string) error {
 	if err != nil {
 		return fmt.Errorf("read %s: %w", filename, err)
 	}
+
+	content := string(sqlBytes)
+
+	// Ambil hanya bagian Up
+	if strings.Contains(content, "-- +goose Up") {
+		parts := strings.Split(content, "-- +goose Down")
+		upPart := strings.Split(parts[0], "-- +goose Up")
+		if len(upPart) > 1 {
+			content = upPart[1]
+		} else {
+			content = upPart[0]
+		}
+	}
+
 	return db.Transaction(func(tx *gorm.DB) error {
-		if err := tx.Exec(string(sqlBytes)).Error; err != nil {
+		if err := tx.Exec(content).Error; err != nil {
 			return fmt.Errorf("exec %s: %w", filename, err)
 		}
 		if err := tx.Exec("INSERT INTO schema_migrations (filename, applied_at) VALUES (?, ?)", filename, time.Now()).Error; err != nil {
