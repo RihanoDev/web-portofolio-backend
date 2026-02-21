@@ -1,0 +1,162 @@
+package article
+
+import (
+	"web-porto-backend/internal/domain/models"
+
+	"gorm.io/gorm"
+)
+
+type Repository interface {
+	Create(article *models.Article) error
+	GetByID(id string) (*models.Article, error)
+	GetAll(limit, offset int) ([]*models.Article, int64, error)
+	Update(article *models.Article) error
+	Delete(id string) error
+	GetBySlug(slug string) (*models.Article, error)
+	GetByAuthorID(authorID int, limit, offset int) ([]*models.Article, int64, error)
+	GetPublished(limit, offset int) ([]*models.Article, int64, error)
+	GetByCategory(categoryID int, limit, offset int) ([]*models.Article, int64, error)
+	GetByTag(tagID int, limit, offset int) ([]*models.Article, int64, error)
+}
+
+type repository struct {
+	db *gorm.DB
+}
+
+func NewRepository(db *gorm.DB) Repository {
+	return &repository{db: db}
+}
+
+func (r *repository) Create(article *models.Article) error {
+	return r.db.Create(article).Error
+}
+
+func (r *repository) GetByID(id string) (*models.Article, error) {
+	// Check if ID is a temporary ID from frontend
+	if len(id) > 0 && id[:5] == "temp-" {
+		return nil, gorm.ErrRecordNotFound
+	}
+
+	var article models.Article
+	err := r.db.Preload("Author").
+		Preload("Categories").
+		Preload("Tags").
+		Where("id = ?", id).First(&article).Error
+	if err != nil {
+		return nil, err
+	}
+	return &article, nil
+}
+
+func (r *repository) GetAll(limit, offset int) ([]*models.Article, int64, error) {
+	var articles []*models.Article
+	var total int64
+
+	// Count total records
+	r.db.Model(&models.Article{}).Count(&total)
+
+	// Get paginated results with preloaded associations
+	err := r.db.Preload("Author").
+		Preload("Categories").
+		Preload("Tags").
+		Order("created_at DESC").
+		Limit(limit).Offset(offset).Find(&articles).Error
+
+	return articles, total, err
+}
+
+func (r *repository) Update(article *models.Article) error {
+	return r.db.Save(article).Error
+}
+
+func (r *repository) Delete(id string) error {
+	// Check if ID is a temporary ID from frontend
+	if len(id) > 0 && id[:5] == "temp-" {
+		// Nothing to delete for temporary IDs
+		return nil
+	}
+
+	return r.db.Delete(&models.Article{}, "id = ?", id).Error
+}
+
+func (r *repository) GetBySlug(slug string) (*models.Article, error) {
+	var article models.Article
+	err := r.db.Preload("Author").
+		Preload("Categories").
+		Preload("Tags").
+		Where("slug = ?", slug).First(&article).Error
+	if err != nil {
+		return nil, err
+	}
+	return &article, nil
+}
+
+func (r *repository) GetByAuthorID(authorID int, limit, offset int) ([]*models.Article, int64, error) {
+	var articles []*models.Article
+	var total int64
+
+	query := r.db.Model(&models.Article{}).Where("author_id = ?", authorID)
+	query.Count(&total)
+
+	err := query.Preload("Author").
+		Preload("Categories").
+		Preload("Tags").
+		Order("created_at DESC").
+		Limit(limit).Offset(offset).Find(&articles).Error
+
+	return articles, total, err
+}
+
+func (r *repository) GetPublished(limit, offset int) ([]*models.Article, int64, error) {
+	var articles []*models.Article
+	var total int64
+
+	query := r.db.Model(&models.Article{}).Where("status = ?", "published")
+	query.Count(&total)
+
+	err := query.Preload("Author").
+		Preload("Categories").
+		Preload("Tags").
+		Order("created_at DESC").
+		Limit(limit).Offset(offset).Find(&articles).Error
+
+	return articles, total, err
+}
+
+func (r *repository) GetByCategory(categoryID int, limit, offset int) ([]*models.Article, int64, error) {
+	var articles []*models.Article
+	var total int64
+
+	query := r.db.Model(&models.Article{}).
+		Joins("JOIN article_categories ac ON ac.article_id = articles.id").
+		Where("ac.category_id = ?", categoryID)
+
+	query.Count(&total)
+
+	err := query.Preload("Author").
+		Preload("Categories").
+		Preload("Tags").
+		Order("created_at DESC").
+		Limit(limit).Offset(offset).Find(&articles).Error
+
+	return articles, total, err
+}
+
+func (r *repository) GetByTag(tagID int, limit, offset int) ([]*models.Article, int64, error) {
+	var articles []*models.Article
+	var total int64
+
+	query := r.db.Model(&models.Article{}).
+		Joins("JOIN article_tags at ON at.article_id = articles.id").
+		Where("at.tag_id = ?", tagID)
+
+	query.Count(&total)
+
+	err := query.Preload("Author").
+		Preload("Categories").
+		Preload("Tags").
+		Order("created_at DESC").
+		Limit(limit).Offset(offset).Find(&articles).Error
+
+	return articles, total, err
+}

@@ -3,6 +3,7 @@ package analytics
 import (
 	"strings"
 	"time"
+	applog "web-porto-backend/common/logger"
 	"web-porto-backend/internal/domain/models"
 
 	"gorm.io/gorm"
@@ -37,10 +38,12 @@ func NewRepository(db *gorm.DB) Repository {
 }
 
 func (r *repository) TrackView(v *models.PageView) error {
+	log := applog.GetLogger().WithFields(applog.Fields{"repo": "analytics", "method": "TrackView"})
 	// Basic bot filtering
 	ua := strings.ToLower(v.UserAgent)
 	if ua != "" {
 		if strings.Contains(ua, "bot") || strings.Contains(ua, "crawl") || strings.Contains(ua, "spider") {
+			log.Debug("skip bot user-agent", applog.Fields{"ua": v.UserAgent})
 			return nil
 		}
 	}
@@ -51,131 +54,221 @@ func (r *repository) TrackView(v *models.PageView) error {
 		Where("page = ? AND visitor_id = ? AND timestamp >= ?", v.Page, v.VisitorID, window).
 		Count(&recent)
 	if recent > 0 {
+		log.Debug("dedup skip within window", applog.Fields{"page": v.Page, "visitor": v.VisitorID})
 		return nil
 	}
-	return r.db.Create(v).Error
+	if err := r.db.Create(v).Error; err != nil {
+		log.Error("db create failed", applog.Fields{"error": err.Error()})
+		return err
+	}
+
+	// Invalidate cache entries to force refresh on next request
+	// This avoids serving stale data after new views are added
+	for key := range statsMemCache {
+		if key == "all" || (v.Page != "" && key == v.Page) ||
+			(strings.HasPrefix(key, "filter:") && strings.Contains(key, "p:"+v.Page+":")) {
+			delete(statsMemCache, key)
+		}
+	}
+
+	log.Info("view tracked, cache invalidated", applog.Fields{"page": v.Page, "visitor": v.VisitorID})
+	return nil
 }
 
+// In-memory cache for analytics stats with 5 minute TTL
+type statsCache struct {
+	stats     *ViewStats
+	timestamp time.Time
+	key       string
+}
+
+// Global cache map (page -> stats)
+var statsMemCache = map[string]statsCache{}
+
 func (r *repository) GetStats(page string) (*ViewStats, error) {
+	log := applog.GetLogger().WithFields(applog.Fields{"repo": "analytics", "method": "GetStats", "page": page})
+
+	// Cache key
+	cacheKey := "all"
+	if page != "" {
+		cacheKey = page
+	}
+
+	// Check cache first (5 minute TTL)
+	if cache, ok := statsMemCache[cacheKey]; ok {
+		if time.Since(cache.timestamp) < 5*time.Minute {
+			log.Info("using cached stats", applog.Fields{"page": page, "age": time.Since(cache.timestamp).Seconds()})
+			return cache.stats, nil
+		}
+	}
+
 	var stats ViewStats
 	now := time.Now()
 	todayStart := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
 	weekAgo := now.AddDate(0, 0, -7)
 	monthAgo := now.AddDate(0, -1, 0)
-	const wherePage = "page = ?"
-	const whereSince = "timestamp >= ?"
 
-	query := r.db.Model(&models.PageView{})
+	// Use a single optimized query with CASE expressions for PostgreSQL
+	// This query gets all counts in one go to avoid multiple round-trips
+	query := `
+		SELECT 
+			COUNT(*) as total,
+			COUNT(CASE WHEN timestamp >= ? THEN 1 END) as today,
+			COUNT(CASE WHEN timestamp >= ? THEN 1 END) as week,
+			COUNT(CASE WHEN timestamp >= ? THEN 1 END) as month,
+			COUNT(DISTINCT visitor_id) as unique_visitors
+		FROM page_views
+	`
+
+	args := []interface{}{todayStart, weekAgo, monthAgo}
+
 	if page != "" {
-		query = query.Where(wherePage, page)
+		query += " WHERE page = ?"
+		args = append(args, page)
 	}
 
-	// Total
-	if err := query.Count(&stats.Total).Error; err != nil {
+	// Define a temporary struct to receive the query results
+	var result struct {
+		Total          int64 `gorm:"column:total"`
+		Today          int64 `gorm:"column:today"`
+		Week           int64 `gorm:"column:week"`
+		Month          int64 `gorm:"column:month"`
+		UniqueVisitors int64 `gorm:"column:unique_visitors"`
+	}
+
+	// Run optimized query
+	err := r.db.Raw(query, args...).Scan(&result).Error
+
+	// Copy results to stats struct
+	if err == nil {
+		stats.Total = result.Total
+		stats.Today = result.Today
+		stats.Week = result.Week
+		stats.Month = result.Month
+		stats.Unique = result.UniqueVisitors
+	}
+
+	if err != nil {
+		log.Error("stats query failed", applog.Fields{"error": err.Error()})
 		return nil, err
 	}
 
-	// Today
-	qToday := r.db.Model(&models.PageView{}).Where(whereSince, todayStart)
-	if page != "" {
-		qToday = qToday.Where(wherePage, page)
-	}
-	if err := qToday.Count(&stats.Today).Error; err != nil {
-		return nil, err
+	// Cache the result
+	statsMemCache[cacheKey] = statsCache{
+		stats:     &stats,
+		timestamp: now,
+		key:       cacheKey,
 	}
 
-	// Week
-	qWeek := r.db.Model(&models.PageView{}).Where(whereSince, weekAgo)
-	if page != "" {
-		qWeek = qWeek.Where(wherePage, page)
-	}
-	if err := qWeek.Count(&stats.Week).Error; err != nil {
-		return nil, err
-	}
-
-	// Month
-	qMonth := r.db.Model(&models.PageView{}).Where(whereSince, monthAgo)
-	if page != "" {
-		qMonth = qMonth.Where(wherePage, page)
-	}
-	if err := qMonth.Count(&stats.Month).Error; err != nil {
-		return nil, err
-	}
-
-	// Unique by visitor
-	qUnique := r.db.Model(&models.PageView{})
-	if page != "" {
-		qUnique = qUnique.Where(wherePage, page)
-	}
-	if err := qUnique.Distinct("visitor_id").Count(&stats.Unique).Error; err != nil {
-		return nil, err
-	}
-
+	log.Info("stats computed and cached", applog.Fields{"total": stats.Total, "unique": stats.Unique})
 	return &stats, nil
 }
 
 // GetStatsWithFilter returns stats within a custom date range and optional filters
 func (r *repository) GetStatsWithFilter(page string, start, end *time.Time, country string) (*ViewStats, error) {
-	var stats ViewStats
-	const wherePage = "page = ?"
-	const whereSince = "timestamp >= ?"
-	const whereBefore = "timestamp <= ?"
-	const whereCountry = "country = ?"
+	log := applog.GetLogger().WithFields(applog.Fields{"repo": "analytics", "method": "GetStatsWithFilter", "page": page})
 
-	base := r.db.Model(&models.PageView{})
+	// Construct cache key for this filter combination
+	cacheKey := "filter:"
 	if page != "" {
-		base = base.Where(wherePage, page)
+		cacheKey += "p:" + page + ":"
 	}
 	if start != nil {
-		base = base.Where(whereSince, *start)
+		cacheKey += "s:" + start.Format(time.RFC3339) + ":"
 	}
 	if end != nil {
-		base = base.Where(whereBefore, *end)
+		cacheKey += "e:" + end.Format(time.RFC3339) + ":"
 	}
 	if country != "" {
-		base = base.Where(whereCountry, country)
+		cacheKey += "c:" + country
 	}
 
-	// Total in range
-	if err := base.Count(&stats.Total).Error; err != nil {
-		return nil, err
+	// Check cache first (2 minute TTL for filtered results)
+	if cache, ok := statsMemCache[cacheKey]; ok {
+		if time.Since(cache.timestamp) < 2*time.Minute {
+			log.Info("using cached filtered stats", applog.Fields{
+				"page": page,
+				"age":  time.Since(cache.timestamp).Seconds(),
+			})
+			return cache.stats, nil
+		}
 	}
 
-	// Today in range (if start/end don't already constrain today)
-	// Compute today start and ensure it's within [start,end] window
+	var stats ViewStats
 	now := time.Now()
 	todayStart := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
-	qToday := base
-	qToday = qToday.Where(whereSince, todayStart)
-	if err := qToday.Count(&stats.Today).Error; err != nil {
-		return nil, err
-	}
-
-	// Week in range
 	weekAgo := now.AddDate(0, 0, -7)
-	qWeek := base.Where(whereSince, weekAgo)
-	if err := qWeek.Count(&stats.Week).Error; err != nil {
-		return nil, err
-	}
-
-	// Month in range
 	monthAgo := now.AddDate(0, -1, 0)
-	qMonth := base.Where(whereSince, monthAgo)
-	if err := qMonth.Count(&stats.Month).Error; err != nil {
+
+	// Build the dynamic SQL query with all conditions
+	query := `
+		SELECT 
+			COUNT(*) as total,
+			COUNT(CASE WHEN timestamp >= ? THEN 1 END) as today,
+			COUNT(CASE WHEN timestamp >= ? THEN 1 END) as week,
+			COUNT(CASE WHEN timestamp >= ? THEN 1 END) as month,
+			COUNT(DISTINCT visitor_id) as unique_visitors
+		FROM page_views
+		WHERE 1=1
+	`
+
+	args := []interface{}{todayStart, weekAgo, monthAgo}
+
+	// Add filters
+	if page != "" {
+		query += " AND page = ?"
+		args = append(args, page)
+	}
+	if start != nil {
+		query += " AND timestamp >= ?"
+		args = append(args, *start)
+	}
+	if end != nil {
+		query += " AND timestamp <= ?"
+		args = append(args, *end)
+	}
+	if country != "" {
+		query += " AND country = ?"
+		args = append(args, country)
+	}
+
+	// Define a temporary struct to receive the query results
+	var result struct {
+		Total          int64 `gorm:"column:total"`
+		Today          int64 `gorm:"column:today"`
+		Week           int64 `gorm:"column:week"`
+		Month          int64 `gorm:"column:month"`
+		UniqueVisitors int64 `gorm:"column:unique_visitors"`
+	}
+
+	// Run query
+	err := r.db.Raw(query, args...).Scan(&result).Error
+	if err != nil {
+		log.Error("filtered stats query failed", applog.Fields{"error": err.Error()})
 		return nil, err
 	}
 
-	// Unique by visitor within range
-	qUnique := base.Distinct("visitor_id")
-	if err := qUnique.Count(&stats.Unique).Error; err != nil {
-		return nil, err
+	// Copy results
+	stats.Total = result.Total
+	stats.Today = result.Today
+	stats.Week = result.Week
+	stats.Month = result.Month
+	stats.Unique = result.UniqueVisitors
+
+	// Cache results
+	statsMemCache[cacheKey] = statsCache{
+		stats:     &stats,
+		timestamp: now,
+		key:       cacheKey,
 	}
 
+	log.Info("filtered stats computed and cached", applog.Fields{"total": stats.Total, "unique": stats.Unique})
 	return &stats, nil
 }
 
 // GetTimeSeries returns aggregated counts by hour or day using Postgres date_trunc
 func (r *repository) GetTimeSeries(page string, start, end time.Time, interval string) ([]TimeSeriesPoint, error) {
+	log := applog.GetLogger().WithFields(applog.Fields{"repo": "analytics", "method": "GetTimeSeries", "page": page, "interval": interval})
 	// Validate interval
 	trunc := "day"
 	switch strings.ToLower(interval) {
@@ -197,7 +290,9 @@ func (r *repository) GetTimeSeries(page string, start, end time.Time, interval s
 	baseSQL += " GROUP BY bucket ORDER BY bucket"
 
 	if err := r.db.Raw(baseSQL, args...).Scan(&points).Error; err != nil {
+		log.Error("timeseries query failed", applog.Fields{"error": err.Error()})
 		return nil, err
 	}
+	log.Info("timeseries computed", applog.Fields{"points": len(points)})
 	return points, nil
 }

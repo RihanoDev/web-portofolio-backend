@@ -1,6 +1,7 @@
 ﻿package user
 
 import (
+	"fmt"
 	"web-porto-backend/internal/domain/models"
 	"web-porto-backend/internal/repositories/user"
 
@@ -11,6 +12,7 @@ type Service interface {
 	GetAll(page, limit int) ([]*models.User, *PaginationInfo, error)
 	GetByID(id uint) (*models.User, error)
 	GetByEmail(email string) (*models.User, error)
+	GetDefaultAdmin() (*models.User, error)
 	Create(user *models.User) error
 	Update(id uint, user *models.User) error
 	Delete(id uint) error
@@ -68,6 +70,29 @@ func (s *service) GetByID(id uint) (*models.User, error) {
 
 func (s *service) GetByEmail(email string) (*models.User, error) {
 	return s.repo.FindByEmail(email)
+}
+
+func (s *service) GetDefaultAdmin() (*models.User, error) {
+	// Try to get admin user by username first
+	users, err := s.repo.FindAll()
+	if err != nil {
+		return nil, err
+	}
+
+	// Find admin user
+	for _, user := range users {
+		if user.Role == "admin" {
+			return &user, nil
+		}
+	}
+
+	// If no admin found, return the first user as fallback
+	if len(users) > 0 {
+		return &users[0], nil
+	}
+
+	// No users at all - this shouldn't happen with migrations
+	return nil, fmt.Errorf("no users found in database")
 }
 
 func (s *service) Create(user *models.User) error {

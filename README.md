@@ -287,7 +287,55 @@ curl -X POST http://localhost:8080/posts \
 
 ## 📝 Configuration
 
-### config.json Structure:
+The application supports **dual configuration**: JSON config file + Environment variable overrides.
+
+### Priority Order:
+
+1. **Environment Variables** (highest priority)
+2. **config.json** (fallback)
+3. **Default Values** (if neither is set)
+
+### Environment Variables:
+
+Copy `.env.example` to `.env` and adjust values:
+
+```bash
+# Server Configuration
+SERVER_PORT=8080
+SERVER_HOST=0.0.0.0
+
+# Database Configuration
+DB_HOST=localhost
+DB_PORT=5432
+DB_USER=postgres
+DB_PASSWORD=postgres
+DB_NAME=web_porto_cms
+DB_SSLMODE=disable
+
+# Redis Configuration
+REDIS_HOST=localhost
+REDIS_PORT=6379
+REDIS_PASSWORD=
+REDIS_DB=0
+
+# JWT Configuration
+JWT_SECRET=your-super-secret-jwt-key-change-this-in-production
+
+# Application Configuration
+APP_NAME=Web Porto CMS
+APP_VERSION=1.0.0
+APP_DEBUG=true
+
+# Analytics Configuration
+ANALYTICS_API_KEY=dev-analytics-key
+
+# Gin Mode
+GIN_MODE=debug  # or 'release' for production
+```
+
+### config.json Structure (Optional):
+
+If you prefer JSON configuration, create a `config.json` file:
 
 ```json
 {
@@ -316,8 +364,30 @@ curl -X POST http://localhost:8080/posts \
     "name": "Web Porto CMS",
     "version": "1.0.0",
     "debug": true
+  },
+  "analytics": {
+    "api_key": "dev-analytics-key"
   }
 }
+```
+
+### Development vs Production:
+
+**Development:**
+
+```bash
+GIN_MODE=debug
+APP_DEBUG=true
+DB_HOST=localhost
+```
+
+**Production:**
+
+```bash
+GIN_MODE=release
+APP_DEBUG=false
+DB_HOST=production-db.example.com
+JWT_SECRET=strong-random-secret
 ```
 
 ## 🔒 Security Features
@@ -330,50 +400,64 @@ curl -X POST http://localhost:8080/posts \
 
 ## 🚀 Production Deployment
 
-> **📘 Complete deployment guide:** See [DEPLOYMENT.md](./DEPLOYMENT.md) for detailed CI/CD setup and GitHub secrets configuration.
+### Using Environment Variables (Recommended):
 
-### Quick Overview
-
-The application uses **dual workflows** for automated deployment:
-
-- **Production**: Triggered by version tags (`v*`), deploys to port **1200**
-- **Development**: Triggered by `development` branch push, deploys to port **2200**
-
-Both environments share the same database and server credentials (via GitHub environment secrets).
-
-### Required GitHub Secrets
-
-Set these in repository Settings → Environments → production:
+Set environment variables in your deployment platform (Docker, Kubernetes, systemd):
 
 ```bash
-# Server/SSH
-SERVER_HOST, SERVER_PORT, SERVER_USER, SERVER_SSH_KEY
-
-# Docker Hub
-DOCKER_USERNAME, DOCKER_PASSWORD
-
-# Database (shared for dev & prod)
-DB_HOST, DB_PORT, DB_USER, DB_PASSWORD, DB_NAME
-
-# Application
-JWT_SECRET
+# Essential Production Variables
+export GIN_MODE=release
+export APP_DEBUG=false
+export SERVER_PORT=8080
+export DB_HOST=your-production-db-host.com
+export DB_PORT=5432
+export DB_USER=your-db-user
+export DB_PASSWORD=your-strong-db-password
+export DB_NAME=web_porto_cms
+export JWT_SECRET=your-production-jwt-secret-min-32-chars
+export REDIS_HOST=your-redis-host
+export ANALYTICS_API_KEY=your-analytics-key
 ```
 
-### Deploy to Production
+### Docker Deployment:
+
+**Production (Port 1200):**
 
 ```bash
-git tag v1.0.0
-git push origin v1.0.0
+docker run -d \
+  --name web-porto-backend-prod \
+  --restart unless-stopped \
+  -p 1200:8080 \
+  -e GIN_MODE=release \
+  -e APP_DEBUG=false \
+  -e SERVER_PORT=8080 \
+  -e DB_HOST=production-db.example.com \
+  -e DB_USER=postgres \
+  -e DB_PASSWORD=strong-password \
+  -e DB_NAME=web_porto_cms \
+  -e JWT_SECRET=your-jwt-secret \
+  rihanodev/web-porto-backend:latest
 ```
 
-### Deploy to Development
+**Development (Port 2200):**
 
 ```bash
-git checkout development
-git push origin development
+docker run -d \
+  --name web-porto-backend-dev \
+  --restart unless-stopped \
+  -p 2200:8080 \
+  -e GIN_MODE=debug \
+  -e APP_DEBUG=true \
+  -e SERVER_PORT=8080 \
+  -e DB_HOST=dev-db.example.com \
+  -e DB_USER=postgres \
+  -e DB_PASSWORD=dev-password \
+  -e DB_NAME=web_porto_cms_dev \
+  -e JWT_SECRET=dev-jwt-secret \
+  rihanodev/web-porto-backend:dev-latest
 ```
 
-### Local Development Build
+### Build for Production:
 
 ```bash
 go build -o web-porto-backend main.go
