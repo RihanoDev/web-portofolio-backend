@@ -9,6 +9,7 @@ import (
 	experienceSrvc "web-porto-backend/internal/services/experience"
 	pageSrvc "web-porto-backend/internal/services/page"
 	projectSrvc "web-porto-backend/internal/services/project"
+	settingSrvc "web-porto-backend/internal/services/setting"
 	tagSrvc "web-porto-backend/internal/services/tag"
 	userSrvc "web-porto-backend/internal/services/user"
 )
@@ -22,6 +23,7 @@ type ServiceRegistry struct {
 	UserService       userSrvc.Service
 	PageService       pageSrvc.Service
 	ProjectService    *projectSrvc.Service
+	SettingService    settingSrvc.Service
 	TagService        tagSrvc.Service
 }
 
@@ -54,6 +56,7 @@ func NewServiceRegistry(repo *repositories.RepositoryRegistry) *ServiceRegistry 
 			userService,
 			tagService,
 		),
-		TagService: tagService,
+		SettingService: settingSrvc.NewService(repo.SettingRepository),
+		TagService:     tagService,
 	}
 }

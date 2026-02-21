@@ -3,6 +3,8 @@
 import (
 	"fmt"
 	"log"
+	"os"
+	"path/filepath"
 	"strconv"
 	"time"
 	appLogger "web-porto-backend/common/logger"
@@ -54,7 +56,7 @@ func main() {
 	}
 
 	// Auto-migrate analytics table (optional safety)
-	if err := db.AutoMigrate(&models.PageView{}); err != nil {
+	if err := db.AutoMigrate(&models.PageView{}, &models.Media{}, &models.Setting{}); err != nil {
 		log.Fatal("Failed to migrate database:", err)
 	}
 
@@ -89,7 +91,14 @@ func main() {
 		log.Println("Warning: Could not connect WebSocket manager to analytics service")
 	}
 
-	handlerRegistry := handlers.NewHandlerRegistry(serviceRegistry, authService, httpAdpt) // Setup Gin router
+	handlerRegistry := handlers.NewHandlerRegistryWithDB(
+		serviceRegistry,
+		authService,
+		httpAdpt,
+		db,
+		getUploadDir(),
+		getBaseURL(cfg),
+	) // Setup Gin router
 	router := gin.Default()
 
 	// Add CORS middleware with specific origins for development and production
@@ -106,21 +115,15 @@ func main() {
 			"https://api-dev.rihanodev.com",
 			// Server IP (various ports)
 			"http://103.59.95.108",
-			"http://103.59.95.108:1200",  // prod BE
-			"http://103.59.95.108:1500",  // prod FE
-			"http://103.59.95.108:1600",  // prod CMS
-			"http://103.59.95.108:2200",  // dev BE
-			"http://103.59.95.108:2500",  // dev FE
-			"http://103.59.95.108:2600",  // dev CMS
+			"http://103.59.95.108:1200", // prod BE
+			"http://103.59.95.108:1500", // prod FE
+			"http://103.59.95.108:1600", // prod CMS
+			"http://103.59.95.108:2200", // dev BE
+			"http://103.59.95.108:2500", // dev FE
+			"http://103.59.95.108:2600", // dev CMS
 			// Localhost for local development
-			"http://localhost:3000",
-			"http://localhost:5173",      // Vite default
-			"http://localhost:5174",
-			"http://localhost:8080",
-			"http://127.0.0.1:3000",
-			"http://127.0.0.1:5173",
-			"http://127.0.0.1:5174",
-			"http://127.0.0.1:8080",
+			"http://localhost:2002",
+			"http://localhost:2003",
 		},
 		AllowMethods:     []string{"GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"},
 		AllowHeaders:     []string{"Origin", "Content-Type", "Accept", "Authorization", "X-API-Key", "X-Requested-With", "Sec-WebSocket-Protocol", "Sec-WebSocket-Version", "Sec-WebSocket-Key", "Upgrade", "Connection"},
@@ -139,10 +142,40 @@ func main() {
 	// Register WebSocket routes
 	routes.SetupWebSocketRoutes(router, wsManager)
 
+	// Serve static uploaded files
+	uploadDir := getUploadDir()
+	router.Static("/uploads", uploadDir)
+	log.Printf("Serving uploads from: %s", uploadDir)
+
 	// Start server
 	port := strconv.Itoa(cfg.Server.Port)
 	log.Printf("Server starting on port %s", port)
 	if err := router.Run(":" + port); err != nil {
 		log.Fatal("Failed to start server:", err)
 	}
+}
+
+// getUploadDir returns the local directory for uploaded files
+func getUploadDir() string {
+	dir := os.Getenv("UPLOAD_DIR")
+	if dir == "" {
+		// Default: 'uploads' folder next to the binary
+		execPath, err := os.Executable()
+		if err != nil {
+			dir = "./uploads"
+		} else {
+			dir = filepath.Join(filepath.Dir(execPath), "uploads")
+		}
+	}
+	return dir
+}
+
+// getBaseURL returns the public base URL for building file URLs
+func getBaseURL(cfg *config.Config) string {
+	baseURL := os.Getenv("BASE_URL")
+	if baseURL != "" {
+		return baseURL
+	}
+	// Fallback: local server
+	return fmt.Sprintf("http://localhost:%d", cfg.Server.Port)
 }
