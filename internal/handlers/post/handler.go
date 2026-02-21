@@ -11,6 +11,22 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+// Constants for messages
+const (
+	// Error messages
+	msgInvalidPostID      = "Invalid post ID"
+	msgPostNotFound       = "Post not found"
+	msgInvalidRequestData = "Invalid request data"
+	msgEmptyIDParameter   = "ID parameter is empty"
+
+	// Success messages
+	msgPostCreated    = "Post created successfully"
+	msgPostUpdated    = "Post updated successfully"
+	msgPostDeleted    = "Post deleted successfully"
+	msgPostRetrieved  = "Post retrieved successfully"
+	msgPostsRetrieved = "Posts retrieved successfully"
+)
+
 type Handler struct {
 	service     post.Service
 	httpAdapter *httpAdapter.HTTPAdapter
@@ -56,7 +72,7 @@ func (h *Handler) Create(c *gin.Context) {
 		return
 	}
 
-	h.httpAdapter.SendSuccessResponse(c, http.StatusCreated, post, "Post created successfully")
+	h.httpAdapter.SendSuccessResponse(c, http.StatusCreated, post, msgPostCreated)
 }
 
 func (h *Handler) GetAll(c *gin.Context) {
@@ -68,36 +84,38 @@ func (h *Handler) GetAll(c *gin.Context) {
 		return
 	}
 
-	responseData := response.NewPaginatedResponse(posts, pagination.Page, pagination.Limit, paginationInfo.Total, "Posts retrieved successfully")
+	responseData := response.NewPaginatedResponse(posts, pagination.Page, pagination.Limit, paginationInfo.Total, msgPostsRetrieved)
 	c.JSON(http.StatusOK, responseData)
 }
 
 func (h *Handler) GetByID(c *gin.Context) {
-	id, err := h.httpAdapter.ParseIDParam(c, "id")
-	if err != nil {
-		c.JSON(http.StatusBadRequest, response.NewErrorResponse("Invalid post ID", err.Error()))
+	// Get ID directly as string since the service expects string
+	id := c.Param("id")
+	if id == "" {
+		c.JSON(http.StatusBadRequest, response.NewErrorResponse(msgInvalidPostID, msgEmptyIDParameter))
 		return
 	}
 
 	post, err := h.service.GetByID(id)
 	if err != nil {
-		c.JSON(http.StatusNotFound, response.NewErrorResponse("Post not found", err.Error()))
+		c.JSON(http.StatusNotFound, response.NewErrorResponse(msgPostNotFound, err.Error()))
 		return
 	}
 
-	h.httpAdapter.SendSuccessResponse(c, http.StatusOK, post, "Post retrieved successfully")
+	h.httpAdapter.SendSuccessResponse(c, http.StatusOK, post, msgPostRetrieved)
 }
 
 func (h *Handler) Update(c *gin.Context) {
-	id, err := h.httpAdapter.ParseIDParam(c, "id")
-	if err != nil {
-		c.JSON(http.StatusBadRequest, response.NewErrorResponse("Invalid post ID", err.Error()))
+	// Get ID directly as string since the service expects string
+	id := c.Param("id")
+	if id == "" {
+		c.JSON(http.StatusBadRequest, response.NewErrorResponse(msgInvalidPostID, msgEmptyIDParameter))
 		return
 	}
 
 	var req UpdatePostRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, response.NewErrorResponse("Invalid request data", err.Error()))
+		c.JSON(http.StatusBadRequest, response.NewErrorResponse(msgInvalidRequestData, err.Error()))
 		return
 	}
 
@@ -113,13 +131,14 @@ func (h *Handler) Update(c *gin.Context) {
 		return
 	}
 
-	h.httpAdapter.SendSuccessResponse(c, http.StatusOK, nil, "Post updated successfully")
+	h.httpAdapter.SendSuccessResponse(c, http.StatusOK, nil, msgPostUpdated)
 }
 
 func (h *Handler) Delete(c *gin.Context) {
-	id, err := h.httpAdapter.ParseIDParam(c, "id")
-	if err != nil {
-		c.JSON(http.StatusBadRequest, response.NewErrorResponse("Invalid post ID", err.Error()))
+	// Get ID directly as string since the service expects string
+	id := c.Param("id")
+	if id == "" {
+		c.JSON(http.StatusBadRequest, response.NewErrorResponse(msgInvalidPostID, msgEmptyIDParameter))
 		return
 	}
 
@@ -128,7 +147,7 @@ func (h *Handler) Delete(c *gin.Context) {
 		return
 	}
 
-	h.httpAdapter.SendSuccessResponse(c, http.StatusOK, nil, "Post deleted successfully")
+	h.httpAdapter.SendSuccessResponse(c, http.StatusOK, nil, msgPostDeleted)
 }
 
 func (h *Handler) GetBySlug(c *gin.Context) {
@@ -140,11 +159,11 @@ func (h *Handler) GetBySlug(c *gin.Context) {
 
 	post, err := h.service.GetBySlug(slug)
 	if err != nil {
-		c.JSON(http.StatusNotFound, response.NewErrorResponse("Post not found", err.Error()))
+		c.JSON(http.StatusNotFound, response.NewErrorResponse(msgPostNotFound, err.Error()))
 		return
 	}
 
-	h.httpAdapter.SendSuccessResponse(c, http.StatusOK, post, "Post retrieved successfully")
+	h.httpAdapter.SendSuccessResponse(c, http.StatusOK, post, msgPostRetrieved)
 }
 
 func (h *Handler) GetByAuthor(c *gin.Context) {

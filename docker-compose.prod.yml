@@ -5,8 +5,9 @@ services:
     restart: unless-stopped
     environment:
       - GIN_MODE=release
+      - SERVER_PORT=1200
     ports:
-      - "8080:8080"
+      - "1200:1200"
     volumes:
       - ./config.json:/app/config.json:ro
     depends_on:

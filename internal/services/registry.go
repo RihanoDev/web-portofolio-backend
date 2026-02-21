@@ -3,29 +3,60 @@ package services
 import (
 	"web-porto-backend/internal/repositories"
 	analyticsSrvc "web-porto-backend/internal/services/analytics"
+	articleSrvc "web-porto-backend/internal/services/article"
 	categorySrvc "web-porto-backend/internal/services/category"
 	commentSrvc "web-porto-backend/internal/services/comment"
+	experienceSrvc "web-porto-backend/internal/services/experience"
 	pageSrvc "web-porto-backend/internal/services/page"
-	postSrvc "web-porto-backend/internal/services/post"
+	projectSrvc "web-porto-backend/internal/services/project"
+	settingSrvc "web-porto-backend/internal/services/setting"
+	tagSrvc "web-porto-backend/internal/services/tag"
 	userSrvc "web-porto-backend/internal/services/user"
 )
 
 type ServiceRegistry struct {
-	AnalyticsService analyticsSrvc.Service
-	CategoryService  categorySrvc.Service
-	CommentService   commentSrvc.Service
-	UserService      userSrvc.Service
-	PostService      postSrvc.Service
-	PageService      pageSrvc.Service
+	AnalyticsService  analyticsSrvc.Service
+	ArticleService    *articleSrvc.Service
+	CategoryService   categorySrvc.Service
+	CommentService    commentSrvc.Service
+	ExperienceService *experienceSrvc.Service
+	UserService       userSrvc.Service
+	PageService       pageSrvc.Service
+	ProjectService    *projectSrvc.Service
+	SettingService    settingSrvc.Service
+	TagService        tagSrvc.Service
 }
 
 func NewServiceRegistry(repo *repositories.RepositoryRegistry) *ServiceRegistry {
+	// Create user service first
+	userService := userSrvc.NewService(repo.UserRepository)
+
+	// Create tag service
+	tagService := tagSrvc.NewService(repo.TagRepository)
+
 	return &ServiceRegistry{
 		AnalyticsService: analyticsSrvc.NewService(repo.AnalyticsRepository),
-		CategoryService:  categorySrvc.NewService(repo.CategoryRepository),
-		CommentService:   commentSrvc.NewService(repo.CommentRepository),
-		UserService:      userSrvc.NewService(repo.UserRepository),
-		PostService:      postSrvc.NewService(repo.PostRepository),
-		PageService:      pageSrvc.NewService(repo.PageRepository),
+		ArticleService: articleSrvc.NewService(
+			repo.ArticleRepository,
+			repo.CategoryRepository,
+			repo.TagRepository,
+			userService,
+		),
+		CategoryService: categorySrvc.NewService(repo.CategoryRepository),
+		CommentService:  commentSrvc.NewService(repo.CommentRepository),
+		ExperienceService: experienceSrvc.NewService(
+			repo.ExperienceRepository,
+			tagService,
+		),
+		UserService: userService,
+		PageService: pageSrvc.NewService(repo.PageRepository),
+		ProjectService: projectSrvc.NewService(
+			repo.ProjectRepository,
+			repo.CategoryRepository,
+			userService,
+			tagService,
+		),
+		SettingService: settingSrvc.NewService(repo.SettingRepository),
+		TagService:     tagService,
 	}
 }

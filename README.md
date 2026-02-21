@@ -1,6 +1,7 @@
 ## Analytics (Page Views)
 
 Endpoints under `/api/v1/analytics`:
+
 - POST `/track` body: `{ page: string, visitorId: string, userAgent?: string, referrer?: string }` -> records a view and returns stats
 - GET `/views?page=/optional-path` -> returns aggregated view stats
 
@@ -13,6 +14,7 @@ A comprehensive, mature, and maintainable Content Management System (CMS) backen
 ## 🚀 Features
 
 ### Core CMS Features
+
 - **User Management**: Registration, authentication, and role-based access control
 - **Content Management**: Posts, Pages, Categories, and Tags
 - **Authentication**: JWT-based authentication with bcrypt password hashing
@@ -26,11 +28,13 @@ A comprehensive, mature, and maintainable Content Management System (CMS) backen
 ### API Endpoints
 
 #### Authentication
+
 - `POST /auth/register` - User registration
 - `POST /auth/login` - User login
 - `GET /auth/me` - Get current user profile
 
 #### Categories
+
 - `GET /categories` - List all categories
 - `GET /categories/:id` - Get category by ID
 - `POST /categories` - Create new category
@@ -38,6 +42,7 @@ A comprehensive, mature, and maintainable Content Management System (CMS) backen
 - `DELETE /categories/:id` - Delete category
 
 #### Posts
+
 - `GET /posts` - List all posts (with pagination)
 - `GET /posts/published` - List published posts
 - `GET /posts/:id` - Get post by ID
@@ -48,6 +53,7 @@ A comprehensive, mature, and maintainable Content Management System (CMS) backen
 - `DELETE /posts/:id` - Delete post
 
 #### Pages
+
 - `GET /pages` - List all pages (with pagination)
 - `GET /pages/published` - List published pages
 - `GET /pages/:id` - Get page by ID
@@ -106,22 +112,26 @@ A comprehensive, mature, and maintainable Content Management System (CMS) backen
 ## 🔧 Installation & Setup
 
 ### Prerequisites
+
 - Go 1.21+
 - PostgreSQL database
 - Git
 
 ### Step 1: Clone Repository
+
 ```bash
 git clone <repository-url>
 cd web-portofolio-backend
 ```
 
 ### Step 2: Install Dependencies
+
 ```bash
 go mod download
 ```
 
 ### Step 3: Configure Database
+
 Update `config.json` with your database credentials:
 
 ```json
@@ -138,16 +148,19 @@ Update `config.json` with your database credentials:
 ```
 
 ### Step 4: Install Goose (Migration Tool)
+
 ```bash
 go install github.com/pressly/goose/v3/cmd/goose@latest
 ```
 
 ### Step 5: Run Database Migrations
+
 ```bash
 goose -dir database_schema postgres "host=your-host port=5432 user=your-user password=your-password dbname=web_porto_cms sslmode=disable" up
 ```
 
 ### Step 6: Start the Server
+
 ```bash
 go run main.go
 ```
@@ -175,6 +188,7 @@ The system uses JWT (JSON Web Tokens) for authentication:
 3. **Protect Routes**: Include `Authorization: Bearer <token>` header
 
 ### Example Registration:
+
 ```bash
 curl -X POST http://localhost:8080/auth/register \
   -H "Content-Type: application/json" \
@@ -187,6 +201,7 @@ curl -X POST http://localhost:8080/auth/register \
 ```
 
 ### Example Login:
+
 ```bash
 curl -X POST http://localhost:8080/auth/login \
   -H "Content-Type: application/json" \
@@ -199,6 +214,7 @@ curl -X POST http://localhost:8080/auth/login \
 ## 📊 API Response Format
 
 ### Success Response:
+
 ```json
 {
   "success": true,
@@ -209,6 +225,7 @@ curl -X POST http://localhost:8080/auth/login \
 ```
 
 ### Error Response:
+
 ```json
 {
   "success": false,
@@ -217,6 +234,7 @@ curl -X POST http://localhost:8080/auth/login \
 ```
 
 ### Paginated Response:
+
 ```json
 {
   "success": true,
@@ -237,6 +255,7 @@ curl -X POST http://localhost:8080/auth/login \
 ## 🧪 Testing
 
 ### Test User Registration:
+
 ```bash
 curl -X POST http://localhost:8080/auth/register \
   -H "Content-Type: application/json" \
@@ -244,6 +263,7 @@ curl -X POST http://localhost:8080/auth/register \
 ```
 
 ### Test Category Creation:
+
 ```bash
 curl -X POST http://localhost:8080/categories \
   -H "Content-Type: application/json" \
@@ -252,6 +272,7 @@ curl -X POST http://localhost:8080/categories \
 ```
 
 ### Test Post Creation:
+
 ```bash
 curl -X POST http://localhost:8080/posts \
   -H "Content-Type: application/json" \
@@ -266,7 +287,58 @@ curl -X POST http://localhost:8080/posts \
 
 ## 📝 Configuration
 
+The application supports **dual configuration**: JSON config file + Environment variable overrides.
+
+### Priority Order:
+
+1. **Environment Variables** (highest priority)
+2. **config.json** (fallback)
+3. **Default Values** (if neither is set)
+
+### Environment Variables:
+
+Copy `.env.example` to `.env` and adjust values:
+
+```bash
+# Server Configuration
+SERVER_PORT=8080
+SERVER_HOST=0.0.0.0
+
+# Database Configuration
+DB_HOST=localhost
+DB_PORT=5432
+DB_USER=postgres
+DB_PASSWORD=postgres
+DB_NAME=web_porto_cms
+DB_SSLMODE=disable
+
+# Redis Configuration
+REDIS_HOST=localhost
+REDIS_PORT=6379
+REDIS_PASSWORD=
+REDIS_DB=0
+
+# JWT Configuration
+JWT_SECRET=your-super-secret-jwt-key-change-this-in-production
+
+# Application Configuration
+APP_NAME=Web Porto CMS
+APP_VERSION=1.0.0
+APP_DEBUG=true
+
+# Analytics Configuration
+ANALYTICS_API_KEY=dev-analytics-key
+
+# Gin Mode
+GIN_MODE=debug  # or 'release' for production
+```
+
+### config.json Structure (Optional):
+
+If you prefer JSON configuration, create a `config.json` file:
+
 ### config.json Structure:
+
 ```json
 {
   "server": {
@@ -294,8 +366,30 @@ curl -X POST http://localhost:8080/posts \
     "name": "Web Porto CMS",
     "version": "1.0.0",
     "debug": true
+  },
+  "analytics": {
+    "api_key": "dev-analytics-key"
   }
 }
+```
+
+### Development vs Production:
+
+**Development:**
+
+```bash
+GIN_MODE=debug
+APP_DEBUG=true
+DB_HOST=localhost
+```
+
+**Production:**
+
+```bash
+GIN_MODE=release
+APP_DEBUG=false
+DB_HOST=production-db.example.com
+JWT_SECRET=strong-random-secret
 ```
 
 ## 🔒 Security Features
@@ -308,7 +402,10 @@ curl -X POST http://localhost:8080/posts \
 
 ## 🚀 Production Deployment
 
+### Using Environment Variables (Recommended):
+
 ### Environment Variables:
+
 For production, consider using environment variables instead of config.json:
 
 ```bash
@@ -319,9 +416,10 @@ export GIN_MODE=release
 ```
 
 ### Build for Production:
+
 ```bash
-go build -o web-porto-cms main.go
-./web-porto-cms
+go build -o web-porto-backend main.go
+./web-porto-backend
 ```
 
 ## 🤝 Contributing
@@ -351,11 +449,11 @@ For support, please create an issue in the repository or contact the development
 1. Copy config.example.json to config.json and adjust values.
 2. Start Postgres via Docker:
 
-  docker compose up -d
+docker compose up -d
 
 3. Build and run backend:
 
-  go build ./...
-  ./web-porto-backend.exe
+go build ./...
+./web-porto-backend.exe
 
 On startup, the app auto-migrates the PageView model and applies SQL files in database_schema once. Adminer UI: http://localhost:8081
