@@ -12,6 +12,7 @@ import (
 func SetupAPIRoutes(router *gin.Engine, handlerRegistry *handlers.HandlerRegistry, authService *auth.AuthService) {
 	// Create API v1 group
 	v1 := router.Group("/api/v1")
+	v1.Use(middleware.EncodeResponse())
 
 	// Setup routes using handler registry
 	setupPublicRoutesWithRegistry(v1, handlerRegistry)
