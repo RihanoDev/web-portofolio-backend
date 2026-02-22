@@ -19,13 +19,38 @@ type Article struct {
 	AuthorID         int
 	Author           User `gorm:"foreignKey:AuthorID"`
 	PublishedAt      *time.Time
-	ReadTime         int        `gorm:"default:0"`
-	ViewCount        int        `gorm:"default:0"`
-	Metadata         string     `gorm:"type:jsonb"`
-	Categories       []Category `gorm:"many2many:article_categories;"`
-	Tags             []Tag      `gorm:"many2many:article_tags;"`
+	ReadTime         int            `gorm:"default:0"`
+	ViewCount        int            `gorm:"default:0"`
+	Metadata         string         `gorm:"type:jsonb"`
+	Categories       []Category     `gorm:"many2many:article_categories;"`
+	Tags             []Tag          `gorm:"many2many:article_tags;"`
+	Images           []ArticleImage `gorm:"foreignKey:ArticleID;constraint:OnDelete:CASCADE;"`
+	Videos           []ArticleVideo `gorm:"foreignKey:ArticleID;constraint:OnDelete:CASCADE;"`
 	CreatedAt        time.Time
 	UpdatedAt        time.Time
+}
+
+// ArticleImage represents an image related to an article
+type ArticleImage struct {
+	ID        string    `gorm:"primaryKey;type:uuid;default:gen_random_uuid()"`
+	ArticleID string    `gorm:"not null;index"`
+	URL       string    `gorm:"not null"`
+	Caption   string    `gorm:"type:text"`
+	AltText   string    `gorm:"type:text"`
+	SortOrder int       `gorm:"default:0"`
+	CreatedAt time.Time `gorm:"autoCreateTime"`
+	UpdatedAt time.Time `gorm:"autoUpdateTime"`
+}
+
+// ArticleVideo represents a video related to an article
+type ArticleVideo struct {
+	ID        string    `gorm:"primaryKey;type:uuid;default:gen_random_uuid()"`
+	ArticleID string    `gorm:"not null;index"`
+	URL       string    `gorm:"not null"`
+	Caption   string    `gorm:"type:text"`
+	SortOrder int       `gorm:"default:0"`
+	CreatedAt time.Time `gorm:"autoCreateTime"`
+	UpdatedAt time.Time `gorm:"autoUpdateTime"`
 }
 
 // BeforeCreate hook to generate UUID

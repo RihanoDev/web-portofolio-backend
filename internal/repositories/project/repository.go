@@ -15,6 +15,9 @@ type Repository interface {
 	GetBySlug(slug string) (*models.Project, error)
 	GetByCategorySlug(slug string, limit, offset int) ([]*models.Project, int64, error)
 	UpdateProjectTechnologies(projectID string, technologyIDs []int) error
+	UpdateProjectCategories(projectID string, categoryIDs []int) error
+	UpdateProjectImages(projectID string, images []models.ProjectImage) error
+	UpdateProjectVideos(projectID string, videos []models.ProjectVideo) error
 }
 
 type repository struct {
@@ -36,7 +39,13 @@ func (r *repository) GetByID(id string) (*models.Project, error) {
 	}
 
 	var project models.Project
-	err := r.db.Preload("Author").Preload("Category").Preload("Tags").Where("id = ?", id).First(&project).Error
+	err := r.db.Preload("Author").
+		Preload("Category").
+		Preload("Categories").
+		Preload("Tags").
+		Preload("Images").
+		Preload("Videos").
+		Where("id = ?", id).First(&project).Error
 	if err != nil {
 		return nil, err
 	}
@@ -51,7 +60,12 @@ func (r *repository) GetAll(limit, offset int) ([]*models.Project, int64, error)
 	r.db.Model(&models.Project{}).Count(&total)
 
 	// Get paginated results with preloaded associations
-	err := r.db.Preload("Author").Preload("Category").Preload("Tags").
+	err := r.db.Preload("Author").
+		Preload("Category").
+		Preload("Categories").
+		Preload("Tags").
+		Preload("Images").
+		Preload("Videos").
 		Limit(limit).Offset(offset).Find(&projects).Error
 
 	return projects, total, err
@@ -72,7 +86,12 @@ func (r *repository) Delete(id string) error {
 
 func (r *repository) GetBySlug(slug string) (*models.Project, error) {
 	var project models.Project
-	err := r.db.Preload("Author").Preload("Category").Preload("Tags").
+	err := r.db.Preload("Author").
+		Preload("Category").
+		Preload("Categories").
+		Preload("Tags").
+		Preload("Images").
+		Preload("Videos").
 		Where("slug = ?", slug).First(&project).Error
 	if err != nil {
 		return nil, err
@@ -121,4 +140,44 @@ func (r *repository) UpdateProjectTechnologies(projectID string, technologyIDs [
 	}
 
 	return nil
+}
+
+func (r *repository) UpdateProjectCategories(projectID string, categoryIDs []int) error {
+	var project models.Project
+	if err := r.db.Where("id = ?", projectID).First(&project).Error; err != nil {
+		return err
+	}
+	var categories []models.Category
+	if len(categoryIDs) > 0 {
+		r.db.Where("id IN ?", categoryIDs).Find(&categories)
+	}
+	return r.db.Model(&project).Association("Categories").Replace(categories)
+}
+
+func (r *repository) UpdateProjectImages(projectID string, images []models.ProjectImage) error {
+	return r.db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Where("project_id = ?", projectID).Delete(&models.ProjectImage{}).Error; err != nil {
+			return err
+		}
+		if len(images) > 0 {
+			if err := tx.Create(&images).Error; err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+}
+
+func (r *repository) UpdateProjectVideos(projectID string, videos []models.ProjectVideo) error {
+	return r.db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Where("project_id = ?", projectID).Delete(&models.ProjectVideo{}).Error; err != nil {
+			return err
+		}
+		if len(videos) > 0 {
+			if err := tx.Create(&videos).Error; err != nil {
+				return err
+			}
+		}
+		return nil
+	})
 }

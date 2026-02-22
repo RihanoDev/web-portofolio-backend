@@ -62,7 +62,7 @@ func NewService(
 	}
 }
 
-// convertStringIDsToInts converts string IDs to integer IDs, handling both numeric IDs and tag names
+// convertStringIDsToInts converts string IDs to integer IDs, handling both numeric IDs and names
 func (s *Service) convertStringIDsToInts(stringIDs []string, isForTags bool) ([]int, error) {
 	var intIDs []int
 	for _, strID := range stringIDs {
@@ -92,40 +92,87 @@ func (s *Service) convertStringIDsToInts(stringIDs []string, isForTags bool) ([]
 				intIDs = append(intIDs, tag.ID)
 			}
 		} else {
-			return nil, fmt.Errorf("failed to convert ID '%s' to integer: %v", strID, err)
+			// It's a category name, try to find or create the category
+			cat, err := s.categoryRepo.FindByName(strID)
+			if err != nil {
+				// Category doesn't exist, create it
+				newCat := &models.Category{
+					Name: strID,
+					Slug: slug.Make(strID),
+				}
+				if err := s.categoryRepo.Create(newCat); err != nil {
+					return nil, fmt.Errorf("failed to create category '%s': %v", strID, err)
+				}
+				intIDs = append(intIDs, newCat.ID)
+			} else {
+				intIDs = append(intIDs, cat.ID)
+			}
 		}
 	}
 	return intIDs, nil
 }
 
-// resolveCategoryIDs resolves category IDs from either int or string arrays
+// resolveCategoryIDs resolves category IDs from all provided sources
 func (s *Service) resolveCategoryIDs(categories []int, categoryIds []int, categoryIdStrs []string) ([]int, error) {
-	// Priority: categories -> categoryIds -> categoryIdStrs
+	var allIDs []int
+
+	// Add int IDs
 	if len(categories) > 0 {
-		return categories, nil
+		allIDs = append(allIDs, categories...)
 	}
 	if len(categoryIds) > 0 {
-		return categoryIds, nil
+		allIDs = append(allIDs, categoryIds...)
 	}
+
+	// Convert and add string IDs/names
 	if len(categoryIdStrs) > 0 {
-		return s.convertStringIDsToInts(categoryIdStrs, false)
+		ids, err := s.convertStringIDsToInts(categoryIdStrs, false)
+		if err != nil {
+			return nil, err
+		}
+		allIDs = append(allIDs, ids...)
 	}
-	return []int{}, nil
+
+	// Deduplicate
+	return s.deduplicateIDs(allIDs), nil
 }
 
-// resolveTagIDs resolves tag IDs from either int or string arrays
+// resolveTagIDs resolves tag IDs from all provided sources
 func (s *Service) resolveTagIDs(tags []int, tagIds []int, tagIdStrs []string) ([]int, error) {
-	// Priority: tags -> tagIds -> tagIdStrs
+	var allIDs []int
+
+	// Add int IDs
 	if len(tags) > 0 {
-		return tags, nil
+		allIDs = append(allIDs, tags...)
 	}
 	if len(tagIds) > 0 {
-		return tagIds, nil
+		allIDs = append(allIDs, tagIds...)
 	}
+
+	// Convert and add string IDs/names
 	if len(tagIdStrs) > 0 {
-		return s.convertStringIDsToInts(tagIdStrs, true)
+		ids, err := s.convertStringIDsToInts(tagIdStrs, true)
+		if err != nil {
+			return nil, err
+		}
+		allIDs = append(allIDs, ids...)
 	}
-	return []int{}, nil
+
+	// Deduplicate
+	return s.deduplicateIDs(allIDs), nil
+}
+
+// deduplicateIDs removes duplicate integer IDs
+func (s *Service) deduplicateIDs(ids []int) []int {
+	uniqueMap := make(map[int]bool)
+	var result []int
+	for _, id := range ids {
+		if id > 0 && !uniqueMap[id] {
+			uniqueMap[id] = true
+			result = append(result, id)
+		}
+	}
+	return result
 }
 
 // generateUniqueSlug memastikan slug unik di database; append -2, -3, dst jika sudah ada.
@@ -231,26 +278,51 @@ func (s *Service) CreateArticle(req dto.CreateArticleRequest) (*dto.ArticleRespo
 
 	// Add tags if any
 	tagIDs, err := s.resolveTagIDs(req.Tags, req.TagIds, req.TagIdStrs)
-	if err != nil {
-		return nil, fmt.Errorf("failed to resolve tag IDs: %v", err)
-	}
-	if len(tagIDs) > 0 {
-		for _, tagID := range tagIDs {
-			tag, err := s.tagRepo.GetByID(tagID)
-			if err != nil {
-				fmt.Printf("Error adding tag: %v\n", err)
-				continue
-			}
-			article.Tags = append(article.Tags, *tag)
-		}
-		// Update article with tags
-		if err := s.articleRepo.Update(article); err != nil {
-			return nil, err
+	if err == nil && len(tagIDs) > 0 {
+		if err := s.articleRepo.UpdateArticleTags(article.ID, tagIDs); err != nil {
+			fmt.Printf("Error adding tags: %v\n", err)
 		}
 	}
 
-	// Convert article to response
-	return s.mapArticleToResponse(article), nil
+	// Handle images if provided
+	if len(req.Images) > 0 {
+		var articleImages []models.ArticleImage
+		for _, img := range req.Images {
+			articleImages = append(articleImages, models.ArticleImage{
+				ArticleID: article.ID,
+				URL:       img.URL,
+				Caption:   img.Caption,
+				AltText:   img.AltText,
+				SortOrder: img.SortOrder,
+			})
+		}
+		if err := s.articleRepo.UpdateArticleImages(article.ID, articleImages); err != nil {
+			return nil, fmt.Errorf("failed to add article images: %v", err)
+		}
+	}
+
+	// Handle videos if provided
+	if len(req.Videos) > 0 {
+		var articleVideos []models.ArticleVideo
+		for _, vid := range req.Videos {
+			articleVideos = append(articleVideos, models.ArticleVideo{
+				ArticleID: article.ID,
+				URL:       vid.URL,
+				Caption:   vid.Caption,
+				SortOrder: vid.SortOrder,
+			})
+		}
+		if err := s.articleRepo.UpdateArticleVideos(article.ID, articleVideos); err != nil {
+			return nil, fmt.Errorf("failed to add article videos: %v", err)
+		}
+	}
+
+	// Load the full article with associations
+	fullArticle, err := s.articleRepo.GetByID(article.ID)
+	if err != nil {
+		return s.mapArticleToResponse(article), nil
+	}
+	return s.mapArticleToResponse(fullArticle), nil
 }
 
 // GetArticleByID retrieves an article by ID
@@ -436,49 +508,59 @@ func (s *Service) UpdateArticle(id string, req dto.UpdateArticleRequest) (*dto.A
 
 	// Update categories - always update if provided
 	categoryIDs, err := s.resolveCategoryIDs(req.Categories, req.CategoryIds, req.CategoryIdStrs)
-	if err != nil {
-		return nil, fmt.Errorf("failed to resolve category IDs: %v", err)
-	}
-
-	// Always clear and update categories (even if empty)
-	var newCategories []models.Category
-	for _, categoryID := range categoryIDs {
-		category, err := s.categoryRepo.FindByID(categoryID)
-		if err != nil {
-			// Log error but continue
-			fmt.Printf("Error adding category: %v\n", err)
-			continue
+	if err == nil && (len(categoryIDs) > 0 || len(req.CategoryIdStrs) > 0) {
+		if err := s.articleRepo.UpdateArticleCategories(article.ID, categoryIDs); err != nil {
+			fmt.Printf("Error updating categories: %v\n", err)
 		}
-		newCategories = append(newCategories, *category)
 	}
-	article.Categories = newCategories
 
 	// Update tags - always update if provided
 	tagIDs, err := s.resolveTagIDs(req.Tags, req.TagIds, req.TagIdStrs)
-	if err != nil {
-		return nil, fmt.Errorf("failed to resolve tag IDs: %v", err)
-	}
-
-	// Always clear and update tags (even if empty)
-	var newTags []models.Tag
-	for _, tagID := range tagIDs {
-		tag, err := s.tagRepo.GetByID(tagID)
-		if err != nil {
-			fmt.Printf("Error adding tag: %v\n", err)
-			continue
+	if err == nil && (len(tagIDs) > 0 || len(req.TagIdStrs) > 0) {
+		if err := s.articleRepo.UpdateArticleTags(article.ID, tagIDs); err != nil {
+			fmt.Printf("Error updating tags: %v\n", err)
 		}
-		newTags = append(newTags, *tag)
 	}
-	article.Tags = newTags // Update metadata - always set to ensure it's updated
 	if req.Metadata != nil {
 		metadataJSON, err := json.Marshal(req.Metadata)
 		if err != nil {
 			return nil, fmt.Errorf("failed to marshal metadata: %v", err)
 		}
 		article.Metadata = string(metadataJSON)
-	} else {
-		// Set empty JSON object if no metadata provided
 		article.Metadata = "{}"
+	}
+
+	// Update images if provided
+	if req.Images != nil {
+		var articleImages []models.ArticleImage
+		for _, img := range req.Images {
+			articleImages = append(articleImages, models.ArticleImage{
+				ArticleID: article.ID,
+				URL:       img.URL,
+				Caption:   img.Caption,
+				AltText:   img.AltText,
+				SortOrder: img.SortOrder,
+			})
+		}
+		if err := s.articleRepo.UpdateArticleImages(article.ID, articleImages); err != nil {
+			return nil, fmt.Errorf("failed to update article images: %v", err)
+		}
+	}
+
+	// Update videos if provided
+	if req.Videos != nil {
+		var articleVideos []models.ArticleVideo
+		for _, vid := range req.Videos {
+			articleVideos = append(articleVideos, models.ArticleVideo{
+				ArticleID: article.ID,
+				URL:       vid.URL,
+				Caption:   vid.Caption,
+				SortOrder: vid.SortOrder,
+			})
+		}
+		if err := s.articleRepo.UpdateArticleVideos(article.ID, articleVideos); err != nil {
+			return nil, fmt.Errorf("failed to update article videos: %v", err)
+		}
 	}
 
 	// Update the article
@@ -503,26 +585,59 @@ func (s *Service) DeleteArticle(id string) error {
 
 // AddArticleImage adds a new image to an article (simplified stub)
 func (s *Service) AddArticleImage(articleID string, imageData dto.ArticleImageData) (*dto.ArticleImageResponse, error) {
-	// This is a simplified implementation
-	// In a real implementation, you would need to create an actual image record in the database
-	return &dto.ArticleImageResponse{
-		ID:        uuid.New().String(),
+	article, err := s.articleRepo.GetByID(articleID)
+	if err != nil {
+		return nil, err
+	}
+
+	images := article.Images
+	newImage := models.ArticleImage{
+		ArticleID: articleID,
 		URL:       imageData.URL,
 		Caption:   imageData.Caption,
 		AltText:   imageData.AltText,
 		SortOrder: imageData.SortOrder,
+	}
+	images = append(images, newImage)
+
+	if err := s.articleRepo.UpdateArticleImages(articleID, images); err != nil {
+		return nil, err
+	}
+
+	return &dto.ArticleImageResponse{
+		ID:        newImage.ID,
+		URL:       newImage.URL,
+		Caption:   newImage.Caption,
+		AltText:   newImage.AltText,
+		SortOrder: newImage.SortOrder,
 	}, nil
 }
 
 // AddArticleVideo adds a new video to an article (simplified stub)
 func (s *Service) AddArticleVideo(articleID string, videoData dto.ArticleVideoData) (*dto.ArticleVideoResponse, error) {
-	// This is a simplified implementation
-	// In a real implementation, you would need to create an actual video record in the database
-	return &dto.ArticleVideoResponse{
-		ID:        uuid.New().String(),
+	article, err := s.articleRepo.GetByID(articleID)
+	if err != nil {
+		return nil, err
+	}
+
+	videos := article.Videos
+	newVideo := models.ArticleVideo{
+		ArticleID: articleID,
 		URL:       videoData.URL,
 		Caption:   videoData.Caption,
 		SortOrder: videoData.SortOrder,
+	}
+	videos = append(videos, newVideo)
+
+	if err := s.articleRepo.UpdateArticleVideos(articleID, videos); err != nil {
+		return nil, err
+	}
+
+	return &dto.ArticleVideoResponse{
+		ID:        newVideo.ID,
+		URL:       newVideo.URL,
+		Caption:   newVideo.Caption,
+		SortOrder: newVideo.SortOrder,
 	}, nil
 }
 
@@ -550,6 +665,27 @@ func (s *Service) mapArticleToResponse(article *models.Article) *dto.ArticleResp
 		Images:   []dto.ArticleImageResponse{},
 		Videos:   []dto.ArticleVideoResponse{},
 		Metadata: make(map[string]interface{}),
+	}
+
+	// Add images from database (primary source)
+	for _, img := range article.Images {
+		response.Images = append(response.Images, dto.ArticleImageResponse{
+			ID:        img.ID,
+			URL:       img.URL,
+			Caption:   img.Caption,
+			AltText:   img.AltText,
+			SortOrder: img.SortOrder,
+		})
+	}
+
+	// Add videos from database (primary source)
+	for _, vid := range article.Videos {
+		response.Videos = append(response.Videos, dto.ArticleVideoResponse{
+			ID:        vid.ID,
+			URL:       vid.URL,
+			Caption:   vid.Caption,
+			SortOrder: vid.SortOrder,
+		})
 	}
 
 	// Add categories
@@ -645,6 +781,27 @@ func (s *Service) mapArticleToListResponse(article *models.Article) dto.ArticleL
 		Images:           []dto.ArticleImageResponse{},
 		Videos:           []dto.ArticleVideoResponse{},
 		Metadata:         make(map[string]interface{}),
+	}
+
+	// Add images from database (primary source)
+	for _, img := range article.Images {
+		response.Images = append(response.Images, dto.ArticleImageResponse{
+			ID:        img.ID,
+			URL:       img.URL,
+			Caption:   img.Caption,
+			AltText:   img.AltText,
+			SortOrder: img.SortOrder,
+		})
+	}
+
+	// Add videos from database (primary source)
+	for _, vid := range article.Videos {
+		response.Videos = append(response.Videos, dto.ArticleVideoResponse{
+			ID:        vid.ID,
+			URL:       vid.URL,
+			Caption:   vid.Caption,
+			SortOrder: vid.SortOrder,
+		})
 	}
 
 	// Add category names

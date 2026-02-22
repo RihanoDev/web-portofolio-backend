@@ -42,13 +42,25 @@ type Experience struct {
 	Location         string
 	StartDate        time.Time `gorm:"not null"`
 	EndDate          *time.Time
-	Current          bool        `gorm:"default:false"`
-	Description      string      `gorm:"type:text"`
-	Responsibilities StringArray `gorm:"type:jsonb"`                         // Keep as JSON for flexibility
-	Technologies     []Tag       `gorm:"many2many:experience_technologies;"` // Use relational for indexing
+	Current          bool              `gorm:"default:false"`
+	Description      string            `gorm:"type:text"`
+	Responsibilities StringArray       `gorm:"type:jsonb"`                         // Keep as JSON for flexibility
+	Technologies     []Tag             `gorm:"many2many:experience_technologies;"` // Use relational for indexing
+	Images           []ExperienceImage `gorm:"foreignKey:ExperienceID;constraint:OnDelete:CASCADE;"`
 	CompanyURL       string
 	LogoURL          string
 	Metadata         string `gorm:"type:jsonb;default:'{}'"` // Flexible data like theme, extra info
 	CreatedAt        time.Time
 	UpdatedAt        time.Time
+}
+
+// ExperienceImage represents an image related to a work experience
+type ExperienceImage struct {
+	ID           string    `gorm:"primaryKey;type:uuid;default:gen_random_uuid()"`
+	ExperienceID int       `gorm:"not null;index"`
+	URL          string    `gorm:"not null"`
+	Caption      string    `gorm:"type:text"`
+	SortOrder    int       `gorm:"default:0"`
+	CreatedAt    time.Time `gorm:"autoCreateTime"`
+	UpdatedAt    time.Time `gorm:"autoUpdateTime"`
 }

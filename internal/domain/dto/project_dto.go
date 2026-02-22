@@ -18,6 +18,8 @@ type CreateProjectRequest struct {
 	LiveDemoURL     string                 `json:"liveDemoUrl"`
 	Images          []ProjectImageData     `json:"images"`
 	Videos          []ProjectVideoData     `json:"videos"`
+	Categories      []int                  `json:"categories"`
+	CategoryNames   []string               `json:"categoryNames"`
 	Technologies    []int                  `json:"technologies"`    // Tag IDs (preferred)
 	TechnologyNames []string               `json:"technologyNames"` // Alternative: Tag names
 	Metadata        map[string]interface{} `json:"metadata"`
@@ -33,8 +35,12 @@ type UpdateProjectRequest struct {
 	CategoryID      *int                   `json:"categoryId"`
 	GitHubURL       *string                `json:"githubUrl"`
 	LiveDemoURL     *string                `json:"liveDemoUrl"`
+	Categories      []int                  `json:"categories"`
+	CategoryNames   []string               `json:"categoryNames"`
 	Technologies    []int                  `json:"technologies"`    // Tag IDs (preferred)
 	TechnologyNames []string               `json:"technologyNames"` // Alternative: Tag names
+	Images          []ProjectImageData     `json:"images"`
+	Videos          []ProjectVideoData     `json:"videos"`
 	Metadata        map[string]interface{} `json:"metadata"`
 }
 
@@ -59,6 +65,7 @@ type ProjectResponse struct {
 	ThumbnailURL string                 `json:"thumbnailUrl"`
 	Status       string                 `json:"status"`
 	Category     *CategoryResponse      `json:"category,omitempty"`
+	Categories   []CategoryResponse     `json:"categories"`
 	Author       AuthorResponse         `json:"author"`
 	GitHubURL    string                 `json:"githubUrl"`
 	LiveDemoURL  string                 `json:"liveDemoUrl"`
