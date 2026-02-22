@@ -13,20 +13,31 @@ type encodeResponseWriter struct {
 	gin.ResponseWriter
 	body       *bytes.Buffer
 	statusCode int
-	written    bool
+	done       bool // set true setelah encode selesai ditulis
 }
 
 func (w *encodeResponseWriter) Write(b []byte) (int, error) {
+	if w.done {
+		return w.ResponseWriter.Write(b)
+	}
 	return w.body.Write(b)
 }
 
 func (w *encodeResponseWriter) WriteHeader(statusCode int) {
-	// Intercept and hold the status code – we'll write later
+	if w.done {
+		w.ResponseWriter.WriteHeader(statusCode)
+		return
+	}
+	// Simpan statusCode untuk nanti — jangan tulis sekarang
 	w.statusCode = statusCode
 }
 
 func (w *encodeResponseWriter) WriteHeaderNow() {
-	// Prevent Gin from flushing the real header too early
+	// Cegah flush prematur selama body masih dikumpulkan
+	// (Gin memanggil ini dari c.Status, tapi kita belum siap)
+	if w.done {
+		w.ResponseWriter.WriteHeaderNow()
+	}
 }
 
 func (w *encodeResponseWriter) Status() int {
@@ -34,6 +45,10 @@ func (w *encodeResponseWriter) Status() int {
 		return w.statusCode
 	}
 	return w.ResponseWriter.Status()
+}
+
+func (w *encodeResponseWriter) Written() bool {
+	return w.done
 }
 
 func EncodeResponse() gin.HandlerFunc {
@@ -63,6 +78,7 @@ func EncodeResponse() gin.HandlerFunc {
 		}
 
 		if statusCode == 204 || w.body.Len() == 0 {
+			w.done = true
 			w.ResponseWriter.WriteHeader(statusCode)
 			return
 		}
@@ -74,6 +90,7 @@ func EncodeResponse() gin.HandlerFunc {
 		header.Set("Content-Type", "text/plain; charset=utf-8")
 		header.Set("X-Encoded-Response", "true")
 
+		w.done = true
 		w.ResponseWriter.WriteHeader(statusCode)
 		w.ResponseWriter.Write(encodedBytes) //nolint:errcheck
 	}

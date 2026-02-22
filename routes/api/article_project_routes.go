@@ -52,6 +52,7 @@ func SetupArticleProjectRoutes(router *gin.Engine, handlerRegistry *handlers.Han
 	{
 		protectedArticles.POST("", handlerRegistry.ArticleHandler.Create)
 		protectedArticles.PUT("/:id", handlerRegistry.ArticleHandler.Update)
+		protectedArticles.PATCH("/:id", handlerRegistry.ArticleHandler.Patch)
 		protectedArticles.DELETE("/:id", handlerRegistry.ArticleHandler.Delete)
 		protectedArticles.POST("/:id/images", handlerRegistry.ArticleHandler.AddImage)
 		protectedArticles.POST("/:id/videos", handlerRegistry.ArticleHandler.AddVideo)
@@ -64,6 +65,7 @@ func SetupArticleProjectRoutes(router *gin.Engine, handlerRegistry *handlers.Han
 	{
 		protectedProjects.POST("", handlerRegistry.ProjectHandler.Create)
 		protectedProjects.PUT("/:id", handlerRegistry.ProjectHandler.Update)
+		protectedProjects.PATCH("/:id", handlerRegistry.ProjectHandler.Patch)
 		protectedProjects.DELETE("/:id", handlerRegistry.ProjectHandler.Delete)
 		protectedProjects.POST("/:id/images", handlerRegistry.ProjectHandler.AddImage)
 		protectedProjects.POST("/:id/videos", handlerRegistry.ProjectHandler.AddVideo)
@@ -78,6 +80,7 @@ func SetupArticleProjectRoutes(router *gin.Engine, handlerRegistry *handlers.Han
 	{
 		protectedExperiences.POST("", handlerRegistry.ExperienceHandler.Create)
 		protectedExperiences.PUT("/:id", handlerRegistry.ExperienceHandler.Update)
+		protectedExperiences.PATCH("/:id", handlerRegistry.ExperienceHandler.Patch)
 		protectedExperiences.DELETE("/:id", handlerRegistry.ExperienceHandler.Delete)
 	}
 

@@ -22,15 +22,25 @@ type Service interface {
 	GetTimeSeries(page string, start, end string, interval string) ([]repo.TimeSeriesPoint, error)
 	GetTopPages(limit int) ([]repo.PageCount, error)
 	SetWebsocketManager(wsManager *websocket.Manager)
+
+	// Content View methods
+	TrackContentView(contentID string, contentType ContentType, visitorID string, userAgent string, referrer string, ip string) error
+	GetContentViewCount(contentID string, contentType ContentType) (int, error)
+	GetContentViewAnalytics(contentID string, contentType ContentType, period string, limit int) ([]AnalyticsDataPoint, error)
 }
 
 type service struct {
-	repo      repo.Repository
-	wsManager *websocket.Manager
+	repo               repo.Repository
+	wsManager          *websocket.Manager
+	contentViewService *ContentViewService
 }
 
-func NewService(r repo.Repository) Service {
-	return &service{repo: r, wsManager: nil}
+func NewService(r repo.Repository, cvs *ContentViewService) Service {
+	return &service{
+		repo:               r,
+		wsManager:          nil,
+		contentViewService: cvs,
+	}
 }
 
 func (s *service) SetWebsocketManager(wsManager *websocket.Manager) {
@@ -119,4 +129,26 @@ func (s *service) GetTimeSeries(page, start, end, interval string) ([]repo.TimeS
 
 func (s *service) GetTopPages(limit int) ([]repo.PageCount, error) {
 	return s.repo.GetTopPages(limit)
+}
+
+// Content View method delegations
+func (s *service) TrackContentView(contentID string, contentType ContentType, visitorID string, userAgent string, referrer string, ip string) error {
+	if s.contentViewService == nil {
+		return nil
+	}
+	return s.contentViewService.TrackContentView(contentID, contentType, visitorID, userAgent, referrer, ip)
+}
+
+func (s *service) GetContentViewCount(contentID string, contentType ContentType) (int, error) {
+	if s.contentViewService == nil {
+		return 0, nil
+	}
+	return s.contentViewService.GetContentViewCount(contentID, contentType)
+}
+
+func (s *service) GetContentViewAnalytics(contentID string, contentType ContentType, period string, limit int) ([]AnalyticsDataPoint, error) {
+	if s.contentViewService == nil {
+		return []AnalyticsDataPoint{}, nil
+	}
+	return s.contentViewService.GetContentViewAnalytics(contentID, contentType, period, limit)
 }
