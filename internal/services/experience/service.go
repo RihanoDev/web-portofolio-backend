@@ -177,6 +177,9 @@ func (s *Service) CreateExperience(req dto.CreateExperienceRequest) (*dto.Experi
 		}
 	}
 
+	// Force responsibilities into metadata for rich support
+	metadata["responsibilities"] = req.Responsibilities
+
 	metadataJSON, err := json.Marshal(metadata)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal metadata: %v", err)
@@ -324,9 +327,10 @@ func (s *Service) UpdateExperience(id int, req dto.UpdateExperienceRequest) (*dt
 	if req.Description != nil && *req.Description != "" {
 		experience.Description = *req.Description
 	}
-	if len(req.Responsibilities) > 0 {
-		experience.Responsibilities = models.StringArray(req.Responsibilities)
+	if req.Responsibilities != nil {
+		experience.Responsibilities = models.StringArray(*req.Responsibilities)
 	}
+
 	if req.CompanyURL != nil && *req.CompanyURL != "" {
 		experience.CompanyURL = *req.CompanyURL
 	}
@@ -334,7 +338,51 @@ func (s *Service) UpdateExperience(id int, req dto.UpdateExperienceRequest) (*dt
 		experience.LogoURL = *req.LogoURL
 	}
 
-	// Handle technologies update - always update if provided
+	// Generate comprehensive metadata JSON - always update
+	metadataContent := make(map[string]interface{})
+	if experience.Metadata != "" && experience.Metadata != "{}" {
+		_ = json.Unmarshal([]byte(experience.Metadata), &metadataContent)
+	}
+	metadataContent["originalId"] = experience.ID
+	metadataContent["lastUpdated"] = time.Now().Format(time.RFC3339)
+	metadataContent["version"] = 2
+	metadataContent["companyUrl"] = experience.CompanyURL
+	metadataContent["logoUrl"] = experience.LogoURL
+
+	// Ensure responsibilities are always in sync in metadata
+	resps := []string(experience.Responsibilities)
+	if resps == nil {
+		resps = []string{}
+	}
+	metadataContent["responsibilities"] = resps
+
+	// Merge user metadata jika ada
+	if req.Metadata != nil {
+		reservedKeys := map[string]bool{
+			"responsibilities": true,
+			"originalId":       true,
+			"lastUpdated":      true,
+			"version":          true,
+			"companyUrl":       true,
+			"logoUrl":          true,
+		}
+		for k, v := range req.Metadata {
+			if !reservedKeys[k] {
+				metadataContent[k] = v
+			}
+		}
+	}
+	metadataBytes, err := json.Marshal(metadataContent)
+	if err == nil {
+		experience.Metadata = string(metadataBytes)
+	}
+
+	// Update the experience in DB first
+	if err := s.experienceRepo.Update(experience); err != nil {
+		return nil, fmt.Errorf("failed to update experience: %v", err)
+	}
+
+	// Handle technologies update - after main update
 	if len(req.TechnologyIDs) > 0 || len(req.TechnologyNames) > 0 {
 		// Resolve technology IDs from either IDs or names
 		technologyIDs, err := s.resolveTechnologies(req.TechnologyIDs, req.TechnologyNames)
@@ -346,33 +394,6 @@ func (s *Service) UpdateExperience(id int, req dto.UpdateExperienceRequest) (*dt
 		if err := s.experienceRepo.UpdateExperienceTechnologies(experience.ID, technologyIDs); err != nil {
 			return nil, fmt.Errorf("failed to update experience technologies: %v", err)
 		}
-	}
-
-	// Generate comprehensive metadata JSON - always update
-	metadataContent := make(map[string]interface{})
-	if experience.Metadata != "" {
-		_ = json.Unmarshal([]byte(experience.Metadata), &metadataContent)
-	}
-	metadataContent["originalId"] = experience.ID
-	metadataContent["lastUpdated"] = time.Now()
-	metadataContent["version"] = 2
-	metadataContent["companyUrl"] = experience.CompanyURL
-	metadataContent["logoUrl"] = experience.LogoURL
-	metadataContent["responsibilities"] = []string(experience.Responsibilities)
-	// Merge user metadata jika ada
-	if req.Metadata != nil {
-		for k, v := range req.Metadata {
-			metadataContent[k] = v
-		}
-	}
-	metadataBytes, err := json.Marshal(metadataContent)
-	if err == nil {
-		experience.Metadata = string(metadataBytes)
-	}
-
-	// Update the experience
-	if err := s.experienceRepo.Update(experience); err != nil {
-		return nil, err
 	}
 
 	// Reload dari DB agar mendapatkan Technologies yang terbaru
@@ -440,16 +461,27 @@ func (s *Service) mapToResponse(experience *models.Experience) *dto.ExperienceRe
 	}
 
 	// Parse metadata and restore rich data
-	if experience.Metadata != "" {
+	if experience.Metadata != "" && experience.Metadata != "{}" {
 		var metadata map[string]interface{}
 		if err := json.Unmarshal([]byte(experience.Metadata), &metadata); err == nil {
 			response.Metadata = metadata
 
 			// Restore additional data from metadata if needed
-			// Keep metadata technologies as additional info only
-			if responsibilities := getStringArray(metadata, "responsibilities"); len(responsibilities) > 0 {
-				response.Responsibilities = responsibilities
+			// IMPORTANT: If responsibilities exist in metadata, they are the source of truth for rich data
+			if val, ok := metadata["responsibilities"]; ok {
+				if arr, ok := val.([]interface{}); ok {
+					resps := make([]string, 0, len(arr))
+					for _, item := range arr {
+						if str, ok := item.(string); ok {
+							resps = append(resps, str)
+						}
+					}
+					response.Responsibilities = resps
+				} else if arr, ok := val.([]string); ok {
+					response.Responsibilities = arr
+				}
 			}
+
 			if companyURL := getString(metadata, "companyUrl"); companyURL != "" {
 				response.CompanyURL = companyURL
 			}
