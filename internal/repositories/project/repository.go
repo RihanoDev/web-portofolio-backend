@@ -1,7 +1,6 @@
 package project
 
 import (
-	"fmt"
 	"web-porto-backend/internal/domain/models"
 
 	"gorm.io/gorm"
@@ -125,15 +124,8 @@ func (r *repository) GetByCategorySlug(slug string, limit, offset int) ([]*model
 		Joins("JOIN categories c ON c.id = pc.category_id").
 		Where("c.slug = ?", slug)
 
-
-	query := r.db.Model(&models.Project{}).
-		Joins("JOIN project_categories pc ON pc.project_id = projects.id").
-		Joins("JOIN categories c ON c.id = pc.category_id").
-		Where("c.slug = ?", slug)
-
 	query.Count(&total)
 
-	err := query.Preload("Author").Preload("Categories").
 	err := query.Preload("Author").Preload("Categories").
 		Limit(limit).Offset(offset).Find(&projects).Error
 

@@ -1,0 +1,38 @@
+On branch development
+You have unmerged paths.
+  (fix conflicts and run "git commit")
+  (use "git merge --abort" to abort the merge)
+
+Changes to be committed:
+	modified:   docker-compose.prod.yml
+	modified:   internal/domain/dto/article_dto.go
+	modified:   internal/handlers/media/handler.go
+	modified:   internal/repositories/category/repository.go
+	modified:   internal/repositories/project/repository.go
+	modified:   main.go
+
+Unmerged paths:
+  (use "git add <file>..." to mark resolution)
+	both modified:   internal/domain/dto/experience_dto.go
+	both modified:   internal/domain/dto/project_dto.go
+	both modified:   internal/domain/models/article.go
+	both modified:   internal/domain/models/experience.go
+	both modified:   internal/domain/models/project.go
+	both modified:   internal/repositories/article/repository.go
+	both modified:   internal/repositories/experience/repository.go
+	both modified:   internal/services/article/service.go
+	both modified:   internal/services/experience/service.go
+	both modified:   internal/services/project/service.go
+
+Changes not staged for commit:
+  (use "git add <file>..." to update what will be committed)
+  (use "git restore <file>..." to discard changes in working directory)
+	modified:   internal/domain/dto/article_dto.go
+	modified:   internal/repositories/category/repository.go
+	modified:   internal/repositories/project/repository.go
+
+Untracked files:
+  (use "git add <file>..." to include in what will be committed)
+	build_errors.txt
+	git_status.txt
+

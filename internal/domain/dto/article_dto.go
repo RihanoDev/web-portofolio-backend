@@ -41,8 +41,6 @@ type UpdateArticleRequest struct {
 	Images           []ArticleImageData     `json:"images"`
 	Videos           []ArticleVideoData     `json:"videos"`
 	PublishAt        *time.Time             `json:"publishAt"`
-	Images           []ArticleImageData     `json:"images"`
-	Videos           []ArticleVideoData     `json:"videos"`
 	Metadata         map[string]interface{} `json:"metadata"`
 }
 
