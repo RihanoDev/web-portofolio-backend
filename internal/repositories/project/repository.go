@@ -1,7 +1,6 @@
 package project
 
 import (
-	"fmt"
 	"web-porto-backend/internal/domain/models"
 
 	"gorm.io/gorm"
@@ -171,18 +170,6 @@ func (r *repository) UpdateProjectTags(projectID string, tagIDs []int) error {
 		r.db.Where("id IN ?", tagIDs).Find(&tags)
 	}
 	return r.db.Model(&project).Association("Tags").Replace(tags)
-}
-
-func (r *repository) UpdateProjectCategories(projectID string, categoryIDs []int) error {
-	var project models.Project
-	if err := r.db.First(&project, "id = ?", projectID).Error; err != nil {
-		return err
-	}
-	var categories []models.Category
-	if len(categoryIDs) > 0 {
-		r.db.Where("id IN ?", categoryIDs).Find(&categories)
-	}
-	return r.db.Model(&project).Association("Categories").Replace(categories)
 }
 
 func (r *repository) UpdateProjectImages(projectID string, images []models.ProjectImage) error {

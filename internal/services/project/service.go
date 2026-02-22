@@ -554,7 +554,7 @@ func (s *Service) mapToResponse(project *models.Project) *dto.ProjectResponse {
 	}
 	if len(response.Categories) > 0 {
 		response.Category = &response.Categories[0]
-	} else if project.Category != nil {
+	} else if project.Category.ID != 0 {
 		response.Category = &dto.CategoryResponse{
 			ID: project.Category.ID, Name: project.Category.Name, Slug: project.Category.Slug,
 		}
@@ -623,7 +623,7 @@ func (s *Service) mapToListResponse(project *models.Project) dto.ProjectListResp
 				ID: cat.ID, Name: cat.Name, Slug: cat.Slug,
 			})
 		}
-	} else if project.Category != nil {
+	} else if project.Category.ID != 0 {
 		response.Category = project.Category.Name
 		catRes := dto.CategoryResponse{
 			ID: project.Category.ID, Name: project.Category.Name, Slug: project.Category.Slug,
