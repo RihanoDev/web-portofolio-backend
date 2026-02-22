@@ -271,11 +271,11 @@ func (s *Service) CreateArticle(req dto.CreateArticleRequest) (*dto.ArticleRespo
 		}
 	}
 
-	// Handle images if provided
+	// Sync Images
 	if len(req.Images) > 0 {
-		var articleImages []models.ArticleImage
+		var images []models.ArticleImage
 		for _, img := range req.Images {
-			articleImages = append(articleImages, models.ArticleImage{
+			images = append(images, models.ArticleImage{
 				ArticleID: article.ID,
 				URL:       img.URL,
 				Caption:   img.Caption,
@@ -283,33 +283,28 @@ func (s *Service) CreateArticle(req dto.CreateArticleRequest) (*dto.ArticleRespo
 				SortOrder: img.SortOrder,
 			})
 		}
-		if err := s.articleRepo.UpdateArticleImages(article.ID, articleImages); err != nil {
-			return nil, fmt.Errorf("failed to add article images: %v", err)
-		}
+		s.articleRepo.UpdateArticleImages(article.ID, images)
 	}
 
-	// Handle videos if provided
+	// Sync Videos
 	if len(req.Videos) > 0 {
-		var articleVideos []models.ArticleVideo
+		var videos []models.ArticleVideo
 		for _, vid := range req.Videos {
-			articleVideos = append(articleVideos, models.ArticleVideo{
+			videos = append(videos, models.ArticleVideo{
 				ArticleID: article.ID,
 				URL:       vid.URL,
 				Caption:   vid.Caption,
 				SortOrder: vid.SortOrder,
 			})
 		}
-		if err := s.articleRepo.UpdateArticleVideos(article.ID, articleVideos); err != nil {
-			return nil, fmt.Errorf("failed to add article videos: %v", err)
-		}
+		s.articleRepo.UpdateArticleVideos(article.ID, videos)
 	}
 
-	// Load the full article with associations
-	fullArticle, err := s.articleRepo.GetByID(article.ID)
-	if err != nil {
-		return s.mapArticleToResponse(article), nil
-	}
-	return s.mapArticleToResponse(fullArticle), nil
+	// Final fetch to get media
+	article, _ = s.articleRepo.GetByID(article.ID)
+
+	// Convert article to response
+	return s.mapArticleToResponse(article), nil
 }
 
 // GetArticleByID retrieves an article by ID

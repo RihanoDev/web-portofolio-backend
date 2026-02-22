@@ -66,24 +66,17 @@ func (r *repository) Update(experience *models.Experience) error {
 }
 
 func (r *repository) Delete(id int) error {
-	return r.db.Transaction(func(tx *gorm.DB) error {
-		var experience models.Experience
-		if err := tx.Where("id = ?", id).First(&experience).Error; err != nil {
-			return err
+	var experience models.Experience
+	if err := r.db.First(&experience, id).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return nil
 		}
+		return err
+	}
 
-		// Clear junction tables
-		if err := tx.Model(&experience).Association("Technologies").Clear(); err != nil {
-			return err
-		}
+	_ = r.db.Model(&experience).Association("Technologies").Clear()
 
-		// Delete the experience
-		if err := tx.Delete(&experience).Error; err != nil {
-			return err
-		}
-
-		return nil
-	})
+	return r.db.Delete(&experience).Error
 }
 
 func (r *repository) GetCurrent() ([]*models.Experience, error) {

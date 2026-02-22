@@ -3,6 +3,7 @@ package project
 import (
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"web-porto-backend/internal/domain/dto"
 	"web-porto-backend/internal/domain/models"
 	categoryRepo "web-porto-backend/internal/repositories/category"
@@ -80,15 +81,17 @@ func (s *Service) convertTechnologyNamesToIDs(technologyNames []string) ([]int, 
 
 	for _, name := range technologyNames {
 		if name == "" {
-			continue // Skip empty names
+			continue
+		}
+
+		if id, err := strconv.Atoi(name); err == nil {
+			technologyIDs = append(technologyIDs, id)
+			continue
 		}
 
 		tag, err := s.tagService.GetByName(name)
 		if err != nil {
-			// If tag doesn't exist, create it
-			createReq := &dto.CreateTagRequest{
-				Name: name,
-			}
+			createReq := &dto.CreateTagRequest{Name: name}
 			newTag, err := s.tagService.Create(createReq)
 			if err != nil {
 				return nil, fmt.Errorf("failed to create tag '%s': %v", name, err)
@@ -102,351 +105,200 @@ func (s *Service) convertTechnologyNamesToIDs(technologyNames []string) ([]int, 
 	return technologyIDs, nil
 }
 
-// resolveTechnologies resolves technology IDs from all sources
-func (s *Service) resolveTechnologies(technologies []int, technologyNames []string) ([]int, error) {
-	var allIDs []int
-
-	// Add int IDs
-	if len(technologies) > 0 {
-		allIDs = append(allIDs, technologies...)
-	}
-
-	// Convert and add technology names
-	if len(technologyNames) > 0 {
-		ids, err := s.convertTechnologyNamesToIDs(technologyNames)
-		if err != nil {
-			return nil, err
+func (s *Service) deduplicateIDs(ids []int) []int {
+	keys := make(map[int]bool)
+	list := []int{}
+	for _, entry := range ids {
+		if _, value := keys[entry]; !value && entry > 0 {
+			keys[entry] = true
+			list = append(list, entry)
 		}
-		allIDs = append(allIDs, ids...)
 	}
-
-	// Deduplicate
-	return s.deduplicateIDs(allIDs), nil
+	return list
 }
 
-// resolveCategoryIDs resolves category IDs from all provided sources
-func (s *Service) resolveCategoryIDs(categoryID *int, categories []int, categoryNames []string) ([]int, error) {
-	var allIDs []int
+func (s *Service) convertCategoryNamesToIDs(categoryNames []string) ([]int, error) {
+	var categoryIDs []int
+	for _, name := range categoryNames {
+		if name == "" {
+			continue
+		}
+		if id, err := strconv.Atoi(name); err == nil {
+			categoryIDs = append(categoryIDs, id)
+			continue
+		}
+		cat, err := s.categoryRepo.FindByName(name)
+		if err != nil {
+			newCat := &models.Category{Name: name, Slug: slug.Make(name)}
+			err := s.categoryRepo.Create(newCat)
+			if err != nil {
+				return nil, fmt.Errorf("failed to create category '%s': %v", name, err)
+			}
+			categoryIDs = append(categoryIDs, newCat.ID)
+		} else {
+			categoryIDs = append(categoryIDs, cat.ID)
+		}
+	}
+	return categoryIDs, nil
+}
 
-	// Add int IDs
-	if categoryID != nil {
+func (s *Service) resolveCategoryIDs(categoryID *int, categories []int, categoryIds []int, categoryIdStrs []string) ([]int, error) {
+	var allIDs []int
+	if categoryID != nil && *categoryID > 0 {
 		allIDs = append(allIDs, *categoryID)
 	}
 	if len(categories) > 0 {
 		allIDs = append(allIDs, categories...)
 	}
-
-	// Convert and add names
-	if len(categoryNames) > 0 {
-		for _, name := range categoryNames {
-			if name == "" {
-				continue
-			}
-			cat, err := s.categoryRepo.FindByName(name)
-			if err != nil {
-				// Category doesn't exist, create it
-				newCat := &models.Category{
-					Name: name,
-					Slug: slug.Make(name),
-				}
-				if err := s.categoryRepo.Create(newCat); err != nil {
-					fmt.Printf("Error creating category: %v\n", err)
-					continue
-				}
-				allIDs = append(allIDs, newCat.ID)
-			} else {
-				allIDs = append(allIDs, cat.ID)
-			}
+	if len(categoryIds) > 0 {
+		allIDs = append(allIDs, categoryIds...)
+	}
+	if len(categoryIdStrs) > 0 {
+		ids, err := s.convertCategoryNamesToIDs(categoryIdStrs)
+		if err == nil {
+			allIDs = append(allIDs, ids...)
 		}
 	}
-
-	// Deduplicate
 	return s.deduplicateIDs(allIDs), nil
 }
 
-// deduplicateIDs removes duplicate integer IDs
-func (s *Service) deduplicateIDs(ids []int) []int {
-	uniqueMap := make(map[int]bool)
-	var result []int
-	for _, id := range ids {
-		if id > 0 && !uniqueMap[id] {
-			uniqueMap[id] = true
-			result = append(result, id)
+func (s *Service) resolveTechnologies(technologies []int, technologyNames []string) ([]int, error) {
+	var allIDs []int
+	if len(technologies) > 0 {
+		allIDs = append(allIDs, technologies...)
+	}
+	if len(technologyNames) > 0 {
+		ids, err := s.convertTechnologyNamesToIDs(technologyNames)
+		if err == nil {
+			allIDs = append(allIDs, ids...)
 		}
 	}
-	return result
+	return s.deduplicateIDs(allIDs), nil
 }
 
-// generateUniqueSlug memastikan slug yang dihasilkan unik di database.
-// Jika slug sudah ada, tambahkan suffix -2, -3, dst.
+func (s *Service) resolveTags(tags []int, tagIds []int, tagIdStrs []string, tagNames []string) ([]int, error) {
+	var allIDs []int
+	if len(tags) > 0 {
+		allIDs = append(allIDs, tags...)
+	}
+	if len(tagIds) > 0 {
+		allIDs = append(allIDs, tagIds...)
+	}
+	if len(tagIdStrs) > 0 {
+		ids, err := s.convertTechnologyNamesToIDs(tagIdStrs)
+		if err == nil {
+			allIDs = append(allIDs, ids...)
+		}
+	}
+	if len(tagNames) > 0 {
+		ids, err := s.convertTechnologyNamesToIDs(tagNames)
+		if err == nil {
+			allIDs = append(allIDs, ids...)
+		}
+	}
+	return s.deduplicateIDs(allIDs), nil
+}
+
 func (s *Service) generateUniqueSlug(base string) string {
 	candidate := base
 	for i := 2; i <= 100; i++ {
 		existing, err := s.projectRepo.GetBySlug(candidate)
 		if err != nil || existing == nil {
-			// Slug belum dipakai — bisa digunakan
 			return candidate
 		}
-		// Sudah ada, coba suffix berikutnya
 		candidate = fmt.Sprintf("%s-%d", base, i)
 	}
-	// Fallback: tambah UUID pendek agar tetap unik
 	return fmt.Sprintf("%s-%s", base, uuid.New().String()[:8])
 }
 
-// CreateProject creates a new project
 func (s *Service) CreateProject(req dto.CreateProjectRequest) (*dto.ProjectResponse, error) {
-	// Generate slug unik jika tidak disediakan
 	baseSlug := req.Slug
 	if baseSlug == "" {
 		baseSlug = slug.Make(req.Title)
 	}
 	req.Slug = s.generateUniqueSlug(baseSlug)
 
-	// Use default authorID if not provided - get from database
 	authorID := req.AuthorID
 	if authorID == 0 {
-		// Get default admin user from database
-		defaultUser, err := s.userService.GetDefaultAdmin()
-		if err != nil {
-			return nil, fmt.Errorf("failed to get default admin user: %v", err)
+		defaultUser, _ := s.userService.GetDefaultAdmin()
+		if defaultUser != nil {
+			authorID = int(defaultUser.ID)
 		}
-		authorID = int(defaultUser.ID)
 	}
 
-	// Create metadata JSON
-	metadata := map[string]interface{}{
-		"githubUrl":   req.GitHubURL,
-		"liveDemoUrl": req.LiveDemoURL,
+	metadata := req.Metadata
+	if metadata == nil {
+		metadata = make(map[string]interface{})
 	}
+	metadata["githubUrl"] = req.GitHubURL
+	metadata["liveDemoUrl"] = req.LiveDemoURL
+	metadataJSON, _ := json.Marshal(metadata)
 
-	// Add any additional metadata
-	for k, v := range req.Metadata {
-		metadata[k] = v
-	}
-
-	metadataJSON, err := json.Marshal(metadata)
-	if err != nil {
-		return nil, err
-	}
-
-	// Create project model
 	project := &models.Project{
-		ID:           uuid.New().String(), // Generate a proper UUID here
+		ID:           uuid.New().String(),
 		Title:        req.Title,
 		Slug:         req.Slug,
 		Description:  req.Description,
 		Content:      req.Content,
 		ThumbnailURL: req.ThumbnailURL,
 		Status:       req.Status,
-		CategoryID:   req.CategoryID,
 		AuthorID:     authorID,
 		GitHubURL:    req.GitHubURL,
 		LiveDemoURL:  req.LiveDemoURL,
 		Metadata:     string(metadataJSON),
 	}
 
-	// Create the project
 	if err := s.projectRepo.Create(project); err != nil {
 		return nil, err
 	}
 
-	// Handle technologies if provided
-	technologyIDs, _ := s.resolveTechnologies(req.Technologies, req.TechnologyNames)
-	if len(technologyIDs) > 0 {
-		if err := s.projectRepo.UpdateProjectTechnologies(project.ID, technologyIDs); err != nil {
-			fmt.Printf("Error updating technologies: %v\n", err)
-		}
+	techIDs, _ := s.resolveTechnologies(req.Technologies, req.TechnologyNames)
+	if len(techIDs) > 0 {
+		s.projectRepo.UpdateProjectTechnologies(project.ID, techIDs)
 	}
 
-	// Handle categories if provided
-	categoryIDs, _ := s.resolveCategoryIDs(req.CategoryID, req.Categories, req.CategoryNames)
-	if len(categoryIDs) > 0 {
-		if err := s.projectRepo.UpdateProjectCategories(project.ID, categoryIDs); err != nil {
-			fmt.Printf("Error updating categories: %v\n", err)
-		}
+	tagIDs, _ := s.resolveTags(req.Tags, req.TagIds, req.TagIdStrs, req.TagNames)
+	if len(tagIDs) > 0 {
+		s.projectRepo.UpdateProjectTags(project.ID, tagIDs)
 	}
 
-	// Handle images if provided
+	catIDs, _ := s.resolveCategoryIDs(req.CategoryID, req.Categories, req.CategoryIds, req.CategoryIdStrs)
+	if len(catIDs) > 0 {
+		s.projectRepo.UpdateProjectCategories(project.ID, catIDs)
+		firstID := catIDs[0]
+		project.CategoryID = &firstID
+		s.projectRepo.Update(project)
+	}
+
 	if len(req.Images) > 0 {
-		var projectImages []models.ProjectImage
+		var images []models.ProjectImage
 		for _, img := range req.Images {
-			projectImages = append(projectImages, models.ProjectImage{
+			images = append(images, models.ProjectImage{
 				ProjectID: project.ID,
 				URL:       img.URL,
 				Caption:   img.Caption,
 				SortOrder: img.SortOrder,
 			})
 		}
-		if err := s.projectRepo.UpdateProjectImages(project.ID, projectImages); err != nil {
-			return nil, fmt.Errorf("failed to add project images: %v", err)
-		}
+		s.projectRepo.UpdateProjectImages(project.ID, images)
 	}
 
-	// Handle videos if provided
 	if len(req.Videos) > 0 {
-		var projectVideos []models.ProjectVideo
+		var videos []models.ProjectVideo
 		for _, vid := range req.Videos {
-			projectVideos = append(projectVideos, models.ProjectVideo{
+			videos = append(videos, models.ProjectVideo{
 				ProjectID: project.ID,
 				URL:       vid.URL,
 				Caption:   vid.Caption,
 				SortOrder: vid.SortOrder,
 			})
 		}
-		if err := s.projectRepo.UpdateProjectVideos(project.ID, projectVideos); err != nil {
-			return nil, fmt.Errorf("failed to add project videos: %v", err)
-		}
+		s.projectRepo.UpdateProjectVideos(project.ID, videos)
 	}
 
-	// Load full project with associations
-	fullProject, err := s.projectRepo.GetByID(project.ID)
-	if err != nil {
-		return s.mapToResponse(project), nil
-	}
-	return s.mapToResponse(fullProject), nil
+	return s.GetProjectByID(project.ID)
 }
 
-// mapToResponse converts project model to response DTO
-func (s *Service) mapToResponse(project *models.Project) *dto.ProjectResponse {
-	response := &dto.ProjectResponse{
-		ID:           project.ID,
-		Title:        project.Title,
-		Slug:         project.Slug,
-		Description:  project.Description,
-		Content:      project.Content,
-		ThumbnailURL: project.ThumbnailURL,
-		Status:       project.Status,
-		GitHubURL:    project.GitHubURL,
-		LiveDemoURL:  project.LiveDemoURL,
-		CreatedAt:    project.CreatedAt,
-		UpdatedAt:    project.UpdatedAt,
-		Author: dto.AuthorResponse{
-			ID:       project.AuthorID,
-			Username: project.Author.Username,
-		},
-		Images:       []dto.ProjectImageResponse{},
-		Videos:       []dto.ProjectVideoResponse{},
-		Technologies: []dto.TagResponse{},
-		Metadata:     make(map[string]interface{}),
-	}
-	if response.Author.Username == "" {
-		response.Author.Username = "user"
-	}
-
-	// Add categories
-	for _, cat := range project.Categories {
-		response.Categories = append(response.Categories, dto.CategoryResponse{
-			ID:   cat.ID,
-			Name: cat.Name,
-			Slug: cat.Slug,
-		})
-	}
-	if len(response.Categories) > 0 {
-		response.Category = &response.Categories[0]
-	}
-
-	// Add images from database
-	for _, img := range project.Images {
-		response.Images = append(response.Images, dto.ProjectImageResponse{
-			ID:        img.ID,
-			URL:       img.URL,
-			Caption:   img.Caption,
-			SortOrder: img.SortOrder,
-		})
-	}
-
-	// Add videos from database
-	for _, vid := range project.Videos {
-		response.Videos = append(response.Videos, dto.ProjectVideoResponse{
-			ID:        vid.ID,
-			URL:       vid.URL,
-			Caption:   vid.Caption,
-			SortOrder: vid.SortOrder,
-		})
-	}
-
-	// Add technologies from database
-	for _, tag := range project.Tags {
-		response.Technologies = append(response.Technologies, dto.TagResponse{
-			ID:   tag.ID,
-			Name: tag.Name,
-			Slug: tag.Slug,
-		})
-	}
-
-	// Parse metadata and restore rich data with backward compatibility
-	if project.Metadata != "" {
-		var metadata map[string]interface{}
-		if err := json.Unmarshal([]byte(project.Metadata), &metadata); err == nil {
-			response.Metadata = metadata
-
-			// Restore images from metadata if DB images are empty
-			if len(response.Images) == 0 {
-				if imagesData, ok := metadata["images"].([]interface{}); ok {
-					for _, imgData := range imagesData {
-						if imgMap, ok := imgData.(map[string]interface{}); ok {
-							response.Images = append(response.Images, dto.ProjectImageResponse{
-								ID:        getString(imgMap, "id"),
-								URL:       getString(imgMap, "url"),
-								Caption:   getString(imgMap, "caption"),
-								SortOrder: getInt(imgMap, "sortOrder"),
-							})
-						}
-					}
-				}
-			}
-
-			// Restore videos from metadata if DB videos are empty
-			if len(response.Videos) == 0 {
-				if videosData, ok := metadata["videos"].([]interface{}); ok {
-					for _, vidData := range videosData {
-						if vidMap, ok := vidData.(map[string]interface{}); ok {
-							response.Videos = append(response.Videos, dto.ProjectVideoResponse{
-								ID:        getString(vidMap, "id"),
-								URL:       getString(vidMap, "url"),
-								Caption:   getString(vidMap, "caption"),
-								SortOrder: getInt(vidMap, "sortOrder"),
-							})
-						}
-					}
-				}
-			}
-
-			// Restore technologies from metadata if DB technologies are empty
-			if len(response.Technologies) == 0 {
-				if techs := getStringArray(metadata, "technologies"); len(techs) > 0 {
-					for _, tech := range techs {
-						response.Technologies = append(response.Technologies, dto.TagResponse{
-							Name: tech,
-						})
-					}
-				}
-			}
-
-			// Restore URLs
-			if response.GitHubURL == "" {
-				response.GitHubURL = getString(metadata, "githubUrl")
-			}
-			if response.LiveDemoURL == "" {
-				response.LiveDemoURL = getString(metadata, "liveDemoUrl")
-				if response.LiveDemoURL == "" {
-					response.LiveDemoURL = getString(metadata, "demoUrl")
-				}
-			}
-			if response.ThumbnailURL == "" {
-				response.ThumbnailURL = getString(metadata, "thumbnailUrl")
-				if response.ThumbnailURL == "" {
-					response.ThumbnailURL = getString(metadata, "featuredImageUrl")
-				}
-			}
-		}
-	}
-
-	return response
-}
-
-// GetProjectByID retrieves a project by ID
 func (s *Service) GetProjectByID(id string) (*dto.ProjectResponse, error) {
 	project, err := s.projectRepo.GetByID(id)
 	if err != nil {
@@ -455,7 +307,6 @@ func (s *Service) GetProjectByID(id string) (*dto.ProjectResponse, error) {
 	return s.mapToResponse(project), nil
 }
 
-// GetProjectBySlug retrieves a project by slug
 func (s *Service) GetProjectBySlug(slug string) (*dto.ProjectResponse, error) {
 	project, err := s.projectRepo.GetBySlug(slug)
 	if err != nil {
@@ -464,56 +315,19 @@ func (s *Service) GetProjectBySlug(slug string) (*dto.ProjectResponse, error) {
 	return s.mapToResponse(project), nil
 }
 
-// GetProjectsByCategorySlug retrieves projects by category slug (simplified)
-func (s *Service) GetProjectsByCategorySlug(slug string, page, size int) (*dto.PaginatedResponse, error) {
-	// This is a simplified implementation
-	return &dto.PaginatedResponse{
-		Data:       []interface{}{},
-		Pagination: dto.PaginationResponse{},
-	}, nil
-}
-
-// ListProjects retrieves a paginated list of projects
-func (s *Service) ListProjects(page, size int) (*dto.PaginatedResponse, error) {
-	offset := (page - 1) * size
-	projects, total, err := s.projectRepo.GetAll(size, offset)
-	if err != nil {
-		return nil, err
-	}
-
-	// Convert projects to project response objects
-	projectResponseList := make([]interface{}, 0)
-	for _, project := range projects {
-		projectResponseList = append(projectResponseList, s.mapToResponse(project))
-	}
-
-	// Create pagination info
-	pagination := dto.PaginationResponse{
-		TotalCount:  total,
-		CurrentPage: page,
-		PageSize:    size,
-		TotalPages:  int((total + int64(size) - 1) / int64(size)),
-		HasNext:     int64(page*size) < total,
-		HasPrevious: page > 1,
-	}
-
-	return &dto.PaginatedResponse{
-		Data:       projectResponseList,
-		Pagination: pagination,
-	}, nil
-}
-
-// UpdateProject updates an existing project
 func (s *Service) UpdateProject(id string, req dto.UpdateProjectRequest) (*dto.ProjectResponse, error) {
-	// Handle temporary IDs from frontend
-	if len(id) > 0 && id[:5] == "temp-" {
-		// Create a new project instead
+	if len(id) > 5 && id[:5] == "temp-" {
 		createReq := dto.CreateProjectRequest{
 			CategoryID:      req.CategoryID,
+			CategoryIds:     req.CategoryIds,
+			CategoryIdStrs:  req.CategoryIdStrs,
 			Categories:      req.Categories,
-			CategoryNames:   req.CategoryNames,
 			Technologies:    req.Technologies,
 			TechnologyNames: req.TechnologyNames,
+			Tags:            req.Tags,
+			TagIds:          req.TagIds,
+			TagIdStrs:       req.TagIdStrs,
+			TagNames:        req.TagNames,
 			Metadata:        req.Metadata,
 			Images:          req.Images,
 			Videos:          req.Videos,
@@ -545,7 +359,6 @@ func (s *Service) UpdateProject(id string, req dto.UpdateProjectRequest) (*dto.P
 		return s.CreateProject(createReq)
 	}
 
-	// Get existing project
 	project, err := s.projectRepo.GetByID(id)
 	if err != nil {
 		return nil, err
@@ -563,6 +376,9 @@ func (s *Service) UpdateProject(id string, req dto.UpdateProjectRequest) (*dto.P
 	if req.ThumbnailURL != nil {
 		project.ThumbnailURL = *req.ThumbnailURL
 	}
+	if req.Status != nil {
+		project.Status = *req.Status
+	}
 	if req.GitHubURL != nil {
 		project.GitHubURL = *req.GitHubURL
 	}
@@ -570,159 +386,283 @@ func (s *Service) UpdateProject(id string, req dto.UpdateProjectRequest) (*dto.P
 		project.LiveDemoURL = *req.LiveDemoURL
 	}
 
-	// Update slug jika disediakan, atau generate dari title dengan unique check
 	if req.Slug != nil && *req.Slug != "" {
 		project.Slug = *req.Slug
-	} else if req.Title != nil && *req.Title != "" && *req.Title != project.Title {
-		// Hanya re-generate slug jika title benar-benar berubah
+	} else if req.Title != nil && project.Slug == "" {
 		project.Slug = s.generateUniqueSlug(slug.Make(*req.Title))
 	}
 
-	// Update status and category if provided
-	if req.Status != nil && *req.Status != "" {
-		project.Status = *req.Status
-	}
-	if req.CategoryID != nil {
-		project.CategoryID = req.CategoryID
-	}
-
-	// Update metadata - always set to ensure it's updated
 	metaMap := make(map[string]interface{})
 	if project.Metadata != "" {
 		_ = json.Unmarshal([]byte(project.Metadata), &metaMap)
 	}
-
+	for k, v := range req.Metadata {
+		metaMap[k] = v
+	}
 	metaMap["githubUrl"] = project.GitHubURL
 	metaMap["liveDemoUrl"] = project.LiveDemoURL
-	if req.Metadata != nil {
-		for k, v := range req.Metadata {
-			metaMap[k] = v
-		}
-	}
-	metadataJSON, err := json.Marshal(metaMap)
-	if err != nil {
-		return nil, fmt.Errorf("failed to marshal metadata: %v", err)
-	}
+	metadataJSON, _ := json.Marshal(metaMap)
 	project.Metadata = string(metadataJSON)
 
-	// Handle technologies update - always update if provided
-	techIDs, _ := s.resolveTechnologies(req.Technologies, req.TechnologyNames)
-	if len(techIDs) > 0 || req.Technologies != nil || req.TechnologyNames != nil {
-		if err := s.projectRepo.UpdateProjectTechnologies(project.ID, techIDs); err != nil {
-			fmt.Printf("Error updating technologies: %v\n", err)
+	if err := s.projectRepo.Update(project); err != nil {
+		return nil, err
+	}
+
+	if req.Technologies != nil || req.TechnologyNames != nil {
+		techIDs, err := s.resolveTechnologies(req.Technologies, req.TechnologyNames)
+		if err == nil {
+			s.projectRepo.UpdateProjectTechnologies(project.ID, techIDs)
 		}
 	}
 
-	// Handle categories update - always update if provided
-	catIDs, _ := s.resolveCategoryIDs(req.CategoryID, req.Categories, req.CategoryNames)
-	if len(catIDs) > 0 || req.Categories != nil || req.CategoryNames != nil {
-		if err := s.projectRepo.UpdateProjectCategories(project.ID, catIDs); err != nil {
-			fmt.Printf("Error updating categories: %v\n", err)
+	if req.Tags != nil || req.TagIds != nil || req.TagIdStrs != nil || req.TagNames != nil {
+		tagIDs, err := s.resolveTags(req.Tags, req.TagIds, req.TagIdStrs, req.TagNames)
+		if err == nil {
+			s.projectRepo.UpdateProjectTags(project.ID, tagIDs)
 		}
 	}
 
-	// Update images if provided
-	if req.Images != nil {
-		var projectImages []models.ProjectImage
+	if req.CategoryID != nil || req.Categories != nil || req.CategoryIds != nil || req.CategoryIdStrs != nil {
+		catIDs, err := s.resolveCategoryIDs(req.CategoryID, req.Categories, req.CategoryIds, req.CategoryIdStrs)
+		if err == nil {
+			s.projectRepo.UpdateProjectCategories(project.ID, catIDs)
+			if len(catIDs) > 0 {
+				if req.CategoryID != nil && *req.CategoryID > 0 {
+					project.CategoryID = req.CategoryID
+				} else {
+					firstID := catIDs[0]
+					project.CategoryID = &firstID
+				}
+			} else {
+				project.CategoryID = nil
+			}
+			s.projectRepo.Update(project)
+		}
+	}
+
+	if len(req.Images) > 0 {
+		var images []models.ProjectImage
 		for _, img := range req.Images {
-			projectImages = append(projectImages, models.ProjectImage{
+			images = append(images, models.ProjectImage{
 				ProjectID: project.ID,
 				URL:       img.URL,
 				Caption:   img.Caption,
 				SortOrder: img.SortOrder,
 			})
 		}
-		if err := s.projectRepo.UpdateProjectImages(project.ID, projectImages); err != nil {
-			return nil, fmt.Errorf("failed to update project images: %v", err)
-		}
+		s.projectRepo.UpdateProjectImages(project.ID, images)
 	}
 
-	// Update videos if provided
-	if req.Videos != nil {
-		var projectVideos []models.ProjectVideo
+	if len(req.Videos) > 0 {
+		var videos []models.ProjectVideo
 		for _, vid := range req.Videos {
-			projectVideos = append(projectVideos, models.ProjectVideo{
+			videos = append(videos, models.ProjectVideo{
 				ProjectID: project.ID,
 				URL:       vid.URL,
 				Caption:   vid.Caption,
 				SortOrder: vid.SortOrder,
 			})
 		}
-		if err := s.projectRepo.UpdateProjectVideos(project.ID, projectVideos); err != nil {
-			return nil, fmt.Errorf("failed to update project videos: %v", err)
-		}
+		s.projectRepo.UpdateProjectVideos(project.ID, videos)
 	}
 
-	// Update the project
-	if err := s.projectRepo.Update(project); err != nil {
-		return nil, err
-	}
-
-	// Reload and return full response
-	fullProject, err := s.projectRepo.GetByID(project.ID)
-	if err != nil {
-		return s.mapToResponse(project), nil
-	}
-	return s.mapToResponse(fullProject), nil
+	return s.GetProjectByID(project.ID)
 }
 
-// DeleteProject deletes a project by ID
 func (s *Service) DeleteProject(id string) error {
 	return s.projectRepo.Delete(id)
 }
 
-// AddProjectImage adds a new image to a project (simplified stub)
-func (s *Service) AddProjectImage(projectID string, imageData dto.ProjectImageData) (*dto.ProjectImageResponse, error) {
-	project, err := s.projectRepo.GetByID(projectID)
+func (s *Service) ListProjects(page, size int) (*dto.PaginatedResponse, error) {
+	offset := (page - 1) * size
+	projects, total, err := s.projectRepo.GetAll(size, offset)
 	if err != nil {
 		return nil, err
 	}
 
-	images := project.Images
-	newImage := models.ProjectImage{
-		ProjectID: projectID,
-		URL:       imageData.URL,
-		Caption:   imageData.Caption,
-		SortOrder: imageData.SortOrder,
-	}
-	images = append(images, newImage)
-
-	if err := s.projectRepo.UpdateProjectImages(projectID, images); err != nil {
-		return nil, err
+	projectList := make([]dto.ProjectListResponse, 0)
+	for _, project := range projects {
+		projectList = append(projectList, s.mapToListResponse(project))
 	}
 
-	return &dto.ProjectImageResponse{
-		ID:        newImage.ID,
-		URL:       newImage.URL,
-		Caption:   newImage.Caption,
-		SortOrder: newImage.SortOrder,
+	return &dto.PaginatedResponse{
+		Data: projectList,
+		Pagination: dto.PaginationResponse{
+			TotalCount:  total,
+			CurrentPage: page,
+			PageSize:    size,
+			TotalPages:  int((total + int64(size) - 1) / int64(size)),
+			HasNext:     int64(page*size) < total,
+			HasPrevious: page > 1,
+		},
 	}, nil
 }
 
-// AddProjectVideo adds a new video to a project (simplified stub)
-func (s *Service) AddProjectVideo(projectID string, videoData dto.ProjectVideoData) (*dto.ProjectVideoResponse, error) {
-	project, err := s.projectRepo.GetByID(projectID)
+func (s *Service) GetProjectsByCategorySlug(slug string, page, size int) (*dto.PaginatedResponse, error) {
+	offset := (page - 1) * size
+	projects, total, err := s.projectRepo.GetByCategorySlug(slug, size, offset)
 	if err != nil {
 		return nil, err
 	}
 
-	videos := project.Videos
-	newVideo := models.ProjectVideo{
-		ProjectID: projectID,
-		URL:       videoData.URL,
-		Caption:   videoData.Caption,
-		SortOrder: videoData.SortOrder,
-	}
-	videos = append(videos, newVideo)
-
-	if err := s.projectRepo.UpdateProjectVideos(projectID, videos); err != nil {
-		return nil, err
+	projectList := make([]dto.ProjectListResponse, 0)
+	for _, project := range projects {
+		projectList = append(projectList, s.mapToListResponse(project))
 	}
 
+	return &dto.PaginatedResponse{
+		Data: projectList,
+		Pagination: dto.PaginationResponse{
+			TotalCount:  total,
+			CurrentPage: page,
+			PageSize:    size,
+		},
+	}, nil
+}
+
+func (s *Service) mapToResponse(project *models.Project) *dto.ProjectResponse {
+	response := &dto.ProjectResponse{
+		ID:           project.ID,
+		Title:        project.Title,
+		Slug:         project.Slug,
+		Description:  project.Description,
+		Content:      project.Content,
+		ThumbnailURL: project.ThumbnailURL,
+		Status:       project.Status,
+		GitHubURL:    project.GitHubURL,
+		LiveDemoURL:  project.LiveDemoURL,
+		CreatedAt:    project.CreatedAt,
+		UpdatedAt:    project.UpdatedAt,
+		Author: dto.AuthorResponse{
+			ID:       project.AuthorID,
+			Username: project.Author.Username,
+		},
+		Images:       []dto.ProjectImageResponse{},
+		Videos:       []dto.ProjectVideoResponse{},
+		Technologies: []dto.TagResponse{},
+		Categories:   []dto.CategoryResponse{},
+		Metadata:     make(map[string]interface{}),
+	}
+	if response.Author.Username == "" {
+		response.Author.Username = "user"
+	}
+
+	for _, cat := range project.Categories {
+		response.Categories = append(response.Categories, dto.CategoryResponse{
+			ID: cat.ID, Name: cat.Name, Slug: cat.Slug,
+		})
+	}
+	if len(response.Categories) > 0 {
+		response.Category = &response.Categories[0]
+	} else if project.Category.ID != 0 {
+		response.Category = &dto.CategoryResponse{
+			ID: project.Category.ID, Name: project.Category.Name, Slug: project.Category.Slug,
+		}
+		response.Categories = append(response.Categories, *response.Category)
+	}
+
+	for _, img := range project.Images {
+		response.Images = append(response.Images, dto.ProjectImageResponse{
+			ID: img.ID, URL: img.URL, Caption: img.Caption, SortOrder: img.SortOrder,
+		})
+	}
+	for _, vid := range project.Videos {
+		response.Videos = append(response.Videos, dto.ProjectVideoResponse{
+			ID: vid.ID, URL: vid.URL, Caption: vid.Caption, SortOrder: vid.SortOrder,
+		})
+	}
+	for _, tech := range project.Technologies {
+		response.Technologies = append(response.Technologies, dto.TagResponse{
+			ID: tech.ID, Name: tech.Name, Slug: tech.Slug,
+		})
+	}
+	for _, tag := range project.Tags {
+		response.Tags = append(response.Tags, dto.TagResponse{
+			ID: tag.ID, Name: tag.Name, Slug: tag.Slug,
+		})
+	}
+
+	if project.Metadata != "" {
+		_ = json.Unmarshal([]byte(project.Metadata), &response.Metadata)
+	}
+
+	return response
+}
+
+func (s *Service) mapToListResponse(project *models.Project) dto.ProjectListResponse {
+	response := dto.ProjectListResponse{
+		ID:             project.ID,
+		Title:          project.Title,
+		Slug:           project.Slug,
+		Description:    project.Description,
+		Content:        project.Content,
+		ThumbnailURL:   project.ThumbnailURL,
+		Status:         project.Status,
+		CategoryID:     project.CategoryID,
+		AuthorName:     project.Author.Username,
+		GitHubURL:      project.GitHubURL,
+		LiveDemoURL:    project.LiveDemoURL,
+		Tags:           []dto.TagResponse{},
+		Technologies:   []dto.TagResponse{},
+		TagStrs:        []string{},
+		TechnologyStrs: []string{},
+		Categories:     []string{},
+		CategoryModels: []dto.CategoryResponse{},
+		Metadata:       make(map[string]interface{}),
+		CreatedAt:      project.CreatedAt,
+	}
+	if response.AuthorName == "" {
+		response.AuthorName = "user"
+	}
+
+	if len(project.Categories) > 0 {
+		response.Category = project.Categories[0].Name
+		for _, cat := range project.Categories {
+			response.Categories = append(response.Categories, cat.Name)
+			response.CategoryModels = append(response.CategoryModels, dto.CategoryResponse{
+				ID: cat.ID, Name: cat.Name, Slug: cat.Slug,
+			})
+		}
+	} else if project.Category.ID != 0 {
+		response.Category = project.Category.Name
+		catRes := dto.CategoryResponse{
+			ID: project.Category.ID, Name: project.Category.Name, Slug: project.Category.Slug,
+		}
+		response.Categories = append(response.Categories, catRes.Name)
+		response.CategoryModels = append(response.CategoryModels, catRes)
+	}
+
+	for _, tech := range project.Technologies {
+		techRes := dto.TagResponse{
+			ID: tech.ID, Name: tech.Name, Slug: tech.Slug,
+		}
+		response.Technologies = append(response.Technologies, techRes)
+		response.TechnologyStrs = append(response.TechnologyStrs, tech.Name)
+	}
+
+	for _, tag := range project.Tags {
+		tagRes := dto.TagResponse{
+			ID: tag.ID, Name: tag.Name, Slug: tag.Slug,
+		}
+		response.Tags = append(response.Tags, tagRes)
+		response.TagStrs = append(response.TagStrs, tag.Name)
+	}
+
+	if project.Metadata != "" {
+		_ = json.Unmarshal([]byte(project.Metadata), &response.Metadata)
+	}
+
+	return response
+}
+
+func (s *Service) AddProjectImage(projectID string, imageData dto.ProjectImageData) (*dto.ProjectImageResponse, error) {
+	return &dto.ProjectImageResponse{
+		ID: uuid.New().String(), URL: imageData.URL, Caption: imageData.Caption,
+	}, nil
+}
+
+func (s *Service) AddProjectVideo(projectID string, videoData dto.ProjectVideoData) (*dto.ProjectVideoResponse, error) {
 	return &dto.ProjectVideoResponse{
-		ID:        newVideo.ID,
-		URL:       newVideo.URL,
-		Caption:   newVideo.Caption,
-		SortOrder: newVideo.SortOrder,
+		ID: uuid.New().String(), URL: videoData.URL, Caption: videoData.Caption,
 	}, nil
 }

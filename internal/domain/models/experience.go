@@ -52,12 +52,11 @@ type Experience struct {
 	Images           []ExperienceImage `gorm:"foreignKey:ExperienceID;constraint:OnDelete:CASCADE;"`
 	CompanyURL       string
 	LogoURL          string
-	Metadata         string `gorm:"type:jsonb;default:'{}'"` // Flexible data like theme, extra info
+	Metadata         string `gorm:"type:jsonb;default:'{}'"`
 	CreatedAt        time.Time
 	UpdatedAt        time.Time
 }
 
-// ExperienceImage for multiple images in an experience entry
 type ExperienceImage struct {
 	ID           string `gorm:"primaryKey;type:uuid"`
 	ExperienceID int    `gorm:"not null"`

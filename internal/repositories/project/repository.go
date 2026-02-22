@@ -1,7 +1,6 @@
 package project
 
 import (
-	"fmt"
 	"web-porto-backend/internal/domain/models"
 
 	"gorm.io/gorm"
@@ -16,6 +15,7 @@ type Repository interface {
 	GetBySlug(slug string) (*models.Project, error)
 	GetByCategorySlug(slug string, limit, offset int) ([]*models.Project, int64, error)
 	UpdateProjectTechnologies(projectID string, technologyIDs []int) error
+	UpdateProjectTags(projectID string, tagIDs []int) error
 	UpdateProjectCategories(projectID string, categoryIDs []int) error
 	UpdateProjectImages(projectID string, images []models.ProjectImage) error
 	UpdateProjectVideos(projectID string, videos []models.ProjectVideo) error
@@ -43,6 +43,7 @@ func (r *repository) GetByID(id string) (*models.Project, error) {
 	err := r.db.Preload("Author").
 		Preload("Category").
 		Preload("Categories").
+		Preload("Technologies").
 		Preload("Tags").
 		Preload("Images").
 		Preload("Videos").
@@ -64,6 +65,7 @@ func (r *repository) GetAll(limit, offset int) ([]*models.Project, int64, error)
 	err := r.db.Preload("Author").
 		Preload("Category").
 		Preload("Categories").
+		Preload("Technologies").
 		Preload("Tags").
 		Preload("Images").
 		Preload("Videos").
@@ -77,38 +79,24 @@ func (r *repository) Update(project *models.Project) error {
 }
 
 func (r *repository) Delete(id string) error {
-	// Check if ID is a valid UUID
 	if len(id) > 0 && id[:5] == "temp-" {
-		// Nothing to delete since it was a temporary ID
 		return nil
 	}
 
-	return r.db.Transaction(func(tx *gorm.DB) error {
-		var project models.Project
-		if err := tx.Where("id = ?", id).First(&project).Error; err != nil {
-			return err
+	var project models.Project
+	if err := r.db.First(&project, "id = ?", id).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return nil
 		}
+		return err
+	}
 
-		// Manually clear ALL junction and related tables to avoid FK violations
-		// We do this manually because GORM associations might be misconfigured
-		// or not fully capture all tables defined in SQL migrations.
-		tables := []string{"project_tags", "project_technologies", "project_categories", "project_images", "project_videos"}
-		for _, table := range tables {
-			// Using Exec to bypass GORM's association logic and hit junction tables directly
-			if err := tx.Exec(fmt.Sprintf("DELETE FROM %s WHERE project_id = ?", table), id).Error; err != nil {
-				// We log but don't fail, as some tables might not exist or be empty
-				// The final tx.Delete will fail if a hard FK is still violated.
-				fmt.Printf("[ProjectRepo.Delete] Warning: failed to clear %s: %v\n", table, err)
-			}
-		}
+	// Clean up many-to-many relationships
+	_ = r.db.Model(&project).Association("Categories").Clear()
+	_ = r.db.Model(&project).Association("Technologies").Clear()
+	_ = r.db.Model(&project).Association("Tags").Clear()
 
-		// Delete the main project record
-		if err := tx.Delete(&project).Error; err != nil {
-			return err
-		}
-
-		return nil
-	})
+	return r.db.Delete(&project).Error
 }
 
 func (r *repository) GetBySlug(slug string) (*models.Project, error) {
@@ -116,6 +104,7 @@ func (r *repository) GetBySlug(slug string) (*models.Project, error) {
 	err := r.db.Preload("Author").
 		Preload("Category").
 		Preload("Categories").
+		Preload("Technologies").
 		Preload("Tags").
 		Preload("Images").
 		Preload("Videos").
@@ -160,26 +149,27 @@ func (r *repository) UpdateProjectCategories(projectID string, categoryIDs []int
 }
 
 func (r *repository) UpdateProjectTechnologies(projectID string, technologyIDs []int) error {
-	// Find the project
 	var project models.Project
-	if err := r.db.Where("id = ?", projectID).First(&project).Error; err != nil {
+	if err := r.db.First(&project, "id = ?", projectID).Error; err != nil {
 		return err
 	}
-
-	// Get tags by IDs
 	var tags []models.Tag
 	if len(technologyIDs) > 0 {
-		if err := r.db.Where("id IN ?", technologyIDs).Find(&tags).Error; err != nil {
-			return err
-		}
+		r.db.Where("id IN ?", technologyIDs).Find(&tags)
 	}
+	return r.db.Model(&project).Association("Technologies").Replace(tags)
+}
 
-	// Replace associations using GORM
-	if err := r.db.Model(&project).Association("Tags").Replace(tags); err != nil {
+func (r *repository) UpdateProjectTags(projectID string, tagIDs []int) error {
+	var project models.Project
+	if err := r.db.First(&project, "id = ?", projectID).Error; err != nil {
 		return err
 	}
-
-	return nil
+	var tags []models.Tag
+	if len(tagIDs) > 0 {
+		r.db.Where("id IN ?", tagIDs).Find(&tags)
+	}
+	return r.db.Model(&project).Association("Tags").Replace(tags)
 }
 
 func (r *repository) UpdateProjectImages(projectID string, images []models.ProjectImage) error {

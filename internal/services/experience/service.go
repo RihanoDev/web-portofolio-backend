@@ -247,31 +247,29 @@ func (s *Service) CreateExperience(req dto.CreateExperienceRequest) (*dto.Experi
 			return nil, fmt.Errorf("failed to resolve technologies: %v", err)
 		}
 
-		// Update experience technologies
 		if err := s.experienceRepo.UpdateExperienceTechnologies(experience.ID, technologyIDs); err != nil {
 			fmt.Printf("[ExperienceService.Create] Association error: %v\n", err)
 			return nil, fmt.Errorf("failed to update experience technologies: %v", err)
 		}
 	}
 
-	// Handle images if provided
+	// Handle Images
 	if len(req.Images) > 0 {
-		var expImages []models.ExperienceImage
+		var images []models.ExperienceImage
 		for _, img := range req.Images {
-			expImages = append(expImages, models.ExperienceImage{
+			images = append(images, models.ExperienceImage{
 				ExperienceID: experience.ID,
 				URL:          img.URL,
 				Caption:      img.Caption,
 				SortOrder:    img.SortOrder,
 			})
 		}
-		if err := s.experienceRepo.UpdateExperienceImages(experience.ID, expImages); err != nil {
-			return nil, fmt.Errorf("failed to add experience images: %v", err)
-		}
+		s.experienceRepo.UpdateExperienceImages(experience.ID, images)
 	}
 
-	// Return response with fresh data
-	return s.GetExperienceByID(experience.ID)
+	// Return response
+	fmt.Printf("[ExperienceService.Create] Successfully created experience ID %d\n", experience.ID)
+	return s.mapToResponse(experience), nil
 }
 
 // GetExperienceByID retrieves an experience entry by ID
@@ -442,20 +440,18 @@ func (s *Service) UpdateExperience(id int, req dto.UpdateExperienceRequest) (*dt
 		}
 	}
 
-	// Update images if provided
-	if req.Images != nil {
-		var expImages []models.ExperienceImage
+	// Handle Images
+	if len(req.Images) > 0 {
+		var images []models.ExperienceImage
 		for _, img := range req.Images {
-			expImages = append(expImages, models.ExperienceImage{
+			images = append(images, models.ExperienceImage{
 				ExperienceID: experience.ID,
 				URL:          img.URL,
 				Caption:      img.Caption,
 				SortOrder:    img.SortOrder,
 			})
 		}
-		if err := s.experienceRepo.UpdateExperienceImages(experience.ID, expImages); err != nil {
-			return nil, fmt.Errorf("failed to update experience images: %v", err)
-		}
+		s.experienceRepo.UpdateExperienceImages(experience.ID, images)
 	}
 
 	// Reload dari DB agar mendapatkan Technologies yang terbaru
@@ -500,9 +496,9 @@ func (s *Service) mapToResponse(experience *models.Experience) *dto.ExperienceRe
 		Description:      experience.Description,
 		Responsibilities: []string(experience.Responsibilities),
 		Technologies:     []dto.TagResponse{}, // Initialize empty array
+		Images:           []dto.ExperienceImageResponse{},
 		CompanyURL:       experience.CompanyURL,
 		LogoURL:          experience.LogoURL,
-		Images:           []dto.ExperienceImageResponse{},
 		Metadata:         make(map[string]interface{}),
 		CreatedAt:        experience.CreatedAt,
 		UpdatedAt:        experience.UpdatedAt,
@@ -524,6 +520,16 @@ func (s *Service) mapToResponse(experience *models.Experience) *dto.ExperienceRe
 			ID:   tag.ID,
 			Name: tag.Name,
 			Slug: tag.Slug,
+		})
+	}
+
+	// Add images from associations
+	for _, img := range experience.Images {
+		response.Images = append(response.Images, dto.ExperienceImageResponse{
+			ID:        img.ID,
+			URL:       img.URL,
+			Caption:   img.Caption,
+			SortOrder: img.SortOrder,
 		})
 	}
 

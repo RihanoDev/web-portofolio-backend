@@ -20,12 +20,13 @@ type Project struct {
 	Categories   []Category `gorm:"many2many:project_categories;"`
 	AuthorID     int
 	Author       User           `gorm:"foreignKey:AuthorID"`
+	Technologies []Tag          `gorm:"many2many:project_technologies;"`
 	Tags         []Tag          `gorm:"many2many:project_tags;"`
 	Metadata     string         `gorm:"type:jsonb;default:'{}'"`
 	GitHubURL    string         `gorm:"column:github_url"`
 	LiveDemoURL  string         `gorm:"column:live_demo_url"`
-	Images       []ProjectImage `gorm:"foreignKey:ProjectID"`
-	Videos       []ProjectVideo `gorm:"foreignKey:ProjectID"`
+	Images       []ProjectImage `gorm:"foreignKey:ProjectID;constraint:OnDelete:CASCADE;"`
+	Videos       []ProjectVideo `gorm:"foreignKey:ProjectID;constraint:OnDelete:CASCADE;"`
 	CreatedAt    time.Time
 	UpdatedAt    time.Time
 }

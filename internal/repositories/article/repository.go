@@ -84,27 +84,18 @@ func (r *repository) Delete(id string) error {
 		return nil
 	}
 
-	return r.db.Transaction(func(tx *gorm.DB) error {
-		var article models.Article
-		if err := tx.Where("id = ?", id).First(&article).Error; err != nil {
-			return err
+	var article models.Article
+	if err := r.db.First(&article, "id = ?", id).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return nil
 		}
+		return err
+	}
 
-		// Clear junction tables
-		if err := tx.Model(&article).Association("Categories").Clear(); err != nil {
-			return err
-		}
-		if err := tx.Model(&article).Association("Tags").Clear(); err != nil {
-			return err
-		}
+	_ = r.db.Model(&article).Association("Categories").Clear()
+	_ = r.db.Model(&article).Association("Tags").Clear()
 
-		// Delete the article
-		if err := tx.Delete(&article).Error; err != nil {
-			return err
-		}
-
-		return nil
-	})
+	return r.db.Delete(&article).Error
 }
 
 func (r *repository) GetBySlug(slug string) (*models.Article, error) {
@@ -131,6 +122,8 @@ func (r *repository) GetByAuthorID(authorID int, limit, offset int) ([]*models.A
 	err := query.Preload("Author").
 		Preload("Categories").
 		Preload("Tags").
+		Preload("Images").
+		Preload("Videos").
 		Order("created_at DESC").
 		Limit(limit).Offset(offset).Find(&articles).Error
 
@@ -147,6 +140,8 @@ func (r *repository) GetPublished(limit, offset int) ([]*models.Article, int64, 
 	err := query.Preload("Author").
 		Preload("Categories").
 		Preload("Tags").
+		Preload("Images").
+		Preload("Videos").
 		Order("created_at DESC").
 		Limit(limit).Offset(offset).Find(&articles).Error
 

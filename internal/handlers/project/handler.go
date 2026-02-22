@@ -185,8 +185,12 @@ func (h *Handler) Update(c *gin.Context) {
 		// Create new project instead with the same data
 		createReq := dto.CreateProjectRequest{
 			CategoryID:      req.CategoryID,
+			Categories:      req.Categories,
+			CategoryIdStrs:  req.CategoryIdStrs,
 			Technologies:    req.Technologies,
 			TechnologyNames: req.TechnologyNames,
+			Tags:            req.Tags,
+			TagNames:        req.TagNames,
 			AuthorID:        0, // Will be set by service using default admin
 			Metadata:        req.Metadata,
 		}
