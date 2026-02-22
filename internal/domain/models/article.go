@@ -60,3 +60,19 @@ func (a *Article) BeforeCreate(tx *gorm.DB) error {
 	}
 	return nil
 }
+
+// BeforeCreate hook for ArticleImage.
+func (ai *ArticleImage) BeforeCreate(tx *gorm.DB) error {
+	if ai.ID == "" {
+		ai.ID = uuid.New().String()
+	}
+	return nil
+}
+
+// BeforeCreate hook for ArticleVideo
+func (av *ArticleVideo) BeforeCreate(tx *gorm.DB) error {
+	if av.ID == "" {
+		av.ID = uuid.New().String()
+	}
+	return nil
+}

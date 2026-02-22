@@ -1,6 +1,7 @@
 package project
 
 import (
+	"fmt"
 	"web-porto-backend/internal/domain/models"
 
 	"gorm.io/gorm"
@@ -130,6 +131,22 @@ func (r *repository) GetByCategorySlug(slug string, limit, offset int) ([]*model
 		Limit(limit).Offset(offset).Find(&projects).Error
 
 	return projects, total, err
+}
+
+func (r *repository) UpdateProjectCategories(projectID string, categoryIDs []int) error {
+	var project models.Project
+	if err := r.db.Where("id = ?", projectID).First(&project).Error; err != nil {
+		return err
+	}
+
+	var categories []models.Category
+	if len(categoryIDs) > 0 {
+		if err := r.db.Where("id IN ?", categoryIDs).Find(&categories).Error; err != nil {
+			return err
+		}
+	}
+
+	return r.db.Model(&project).Association("Categories").Replace(categories)
 }
 
 func (r *repository) UpdateProjectTechnologies(projectID string, technologyIDs []int) error {
