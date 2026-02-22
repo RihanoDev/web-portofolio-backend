@@ -53,9 +53,13 @@ func (r *repository) GetAll(limit, offset int) ([]*models.Experience, int64, err
 }
 
 func (r *repository) Update(experience *models.Experience) error {
-	err := r.db.Save(experience).Error
+	fmt.Printf("[ExperienceRepo.Update] Forcing update for ID %d, Responsibilities: %v\n",
+		experience.ID, experience.Responsibilities)
+	// Use Select("*") to force update all columns, including those that might have zero values
+	// Omit Technologies because updating associations should be done separately (via UpdateExperienceTechnologies)
+	err := r.db.Model(experience).Select("*").Omit("Technologies").Updates(experience).Error
 	if err != nil {
-		fmt.Printf("[ExperienceRepo.Update] GORM Save error for id=%d: %v\n", experience.ID, err)
+		fmt.Printf("[ExperienceRepo.Update] GORM Update error for id=%d: %v\n", experience.ID, err)
 	}
 	return err
 }

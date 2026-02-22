@@ -27,7 +27,7 @@ type UpdateExperienceRequest struct {
 	EndDate          *string                `json:"endDate"`   // Format: "YYYY-MM-DD"
 	Current          *bool                  `json:"current"`
 	Description      *string                `json:"description"`
-	Responsibilities []string               `json:"responsibilities"` // Keep as JSON for flexibility
+	Responsibilities *[]string              `json:"responsibilities"` // Keep as JSON for flexibility
 	TechnologyIDs    []int                  `json:"technologyIds"`    // Tag IDs (preferred)
 	TechnologyNames  []string               `json:"technologyNames"`  // Alternative: Tag names
 	CompanyURL       *string                `json:"companyUrl"`
