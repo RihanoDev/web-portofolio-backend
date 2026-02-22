@@ -58,7 +58,7 @@ func (r *repository) Update(experience *models.Experience) error {
 		experience.ID, experience.Responsibilities)
 	// Use Select("*") to force update all columns, including those that might have zero values
 	// Omit Technologies because updating associations should be done separately (via UpdateExperienceTechnologies)
-	err := r.db.Model(experience).Select("*").Omit("Technologies").Updates(experience).Error
+	err := r.db.Model(experience).Select("*").Omit("Technologies", "Images").Updates(experience).Error
 	if err != nil {
 		fmt.Printf("[ExperienceRepo.Update] GORM Update error for id=%d: %v\n", experience.ID, err)
 	}

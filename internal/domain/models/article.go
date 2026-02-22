@@ -30,27 +30,33 @@ type Article struct {
 	UpdatedAt        time.Time
 }
 
+// ArticleImage represents an image related to an article
+type ArticleImage struct {
+	ID        string    `gorm:"primaryKey;type:uuid"`
+	ArticleID string    `gorm:"not null;index"`
+	URL       string    `gorm:"not null"`
+	Caption   string    `gorm:"type:text"`
+	AltText   string    `gorm:"type:text"`
+	SortOrder int       `gorm:"default:0"`
+	CreatedAt time.Time `gorm:"autoCreateTime"`
+	UpdatedAt time.Time `gorm:"autoUpdateTime"`
+}
+
+// ArticleVideo represents a video related to an article
+type ArticleVideo struct {
+	ID        string    `gorm:"primaryKey;type:uuid"`
+	ArticleID string    `gorm:"not null;index"`
+	URL       string    `gorm:"not null"`
+	Caption   string    `gorm:"type:text"`
+	SortOrder int       `gorm:"default:0"`
+	CreatedAt time.Time `gorm:"autoCreateTime"`
+	UpdatedAt time.Time `gorm:"autoUpdateTime"`
+}
+
 // BeforeCreate hook to generate UUID
 func (a *Article) BeforeCreate(tx *gorm.DB) error {
 	if a.ID == "" {
 		a.ID = uuid.New().String()
 	}
 	return nil
-}
-
-type ArticleImage struct {
-	ID        string `gorm:"primaryKey;type:uuid;default:gen_random_uuid()"`
-	ArticleID string `gorm:"type:uuid;index"`
-	URL       string `gorm:"not null"`
-	Caption   string
-	AltText   string
-	SortOrder int `gorm:"default:0"`
-}
-
-type ArticleVideo struct {
-	ID        string `gorm:"primaryKey;type:uuid;default:gen_random_uuid()"`
-	ArticleID string `gorm:"type:uuid;index"`
-	URL       string `gorm:"not null"`
-	Caption   string
-	SortOrder int `gorm:"default:0"`
 }

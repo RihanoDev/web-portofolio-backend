@@ -15,12 +15,13 @@ type CreateProjectRequest struct {
 	CategoryID      *int                   `json:"categoryId"`
 	CategoryIds     []int                  `json:"categoryIds"`
 	CategoryIdStrs  []string               `json:"categoryIdStrs"`
-	Categories      []int                  `json:"categories"` // For direct ID array
-	AuthorID        int                    `json:"authorId"`   // Not required anymore
+	AuthorID        int                    `json:"authorId"` // Not required anymore
 	GitHubURL       string                 `json:"githubUrl"`
 	LiveDemoURL     string                 `json:"liveDemoUrl"`
 	Images          []ProjectImageData     `json:"images"`
 	Videos          []ProjectVideoData     `json:"videos"`
+	Categories      []int                  `json:"categories"`      // Category IDs
+	CategoryNames   []string               `json:"categoryNames"`   // Category names for auto-creation
 	Technologies    []int                  `json:"technologies"`    // Tag IDs (preferred)
 	TechnologyNames []string               `json:"technologyNames"` // Alternative: Tag names
 	Tags            []int                  `json:"tags"`            // General tags IDs

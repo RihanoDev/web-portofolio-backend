@@ -63,7 +63,7 @@ type ExperienceImageData struct {
 }
 
 type ExperienceImageResponse struct {
-	ID        int    `json:"id"`
+	ID        string `json:"id"`
 	URL       string `json:"url"`
 	Caption   string `json:"caption"`
 	SortOrder int    `json:"sortOrder"`

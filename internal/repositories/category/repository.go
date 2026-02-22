@@ -43,6 +43,15 @@ func (r *repository) FindByID(id int) (*models.Category, error) {
 	return &category, nil
 }
 
+func (r *repository) FindByName(name string) (*models.Category, error) {
+	var category models.Category
+	err := r.db.Where("name = ?", name).First(&category).Error
+	if err != nil {
+		return nil, err
+	}
+	return &category, nil
+}
+
 func (r *repository) FindBySlug(slug string) (*models.Category, error) {
 	var category models.Category
 	err := r.db.Where("slug = ?", slug).First(&category).Error

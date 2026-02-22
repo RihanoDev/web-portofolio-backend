@@ -4,6 +4,9 @@ import (
 	"database/sql/driver"
 	"encoding/json"
 	"time"
+
+	"github.com/google/uuid"
+	"gorm.io/gorm"
 )
 
 // StringArray is a custom type for handling PostgreSQL arrays
@@ -42,22 +45,32 @@ type Experience struct {
 	Location         string
 	StartDate        time.Time `gorm:"not null"`
 	EndDate          *time.Time
-	Current          bool        `gorm:"default:false"`
-	Description      string      `gorm:"type:text"`
-	Responsibilities StringArray `gorm:"type:jsonb"`                         // Keep as JSON for flexibility
-	Technologies     []Tag       `gorm:"many2many:experience_technologies;"` // Use relational for indexing
+	Current          bool              `gorm:"default:false"`
+	Description      string            `gorm:"type:text"`
+	Responsibilities StringArray       `gorm:"type:jsonb"`                         // Keep as JSON for flexibility
+	Technologies     []Tag             `gorm:"many2many:experience_technologies;"` // Use relational for indexing
+	Images           []ExperienceImage `gorm:"foreignKey:ExperienceID;constraint:OnDelete:CASCADE;"`
 	CompanyURL       string
 	LogoURL          string
-	Metadata         string            `gorm:"type:jsonb;default:'{}'"`
-	Images           []ExperienceImage `gorm:"foreignKey:ExperienceID;constraint:OnDelete:CASCADE;"`
+	Metadata         string `gorm:"type:jsonb;default:'{}'"`
 	CreatedAt        time.Time
 	UpdatedAt        time.Time
 }
 
 type ExperienceImage struct {
-	ID           int    `gorm:"primaryKey;autoIncrement"`
-	ExperienceID int    `gorm:"index"`
+	ID           string `gorm:"primaryKey;type:uuid"`
+	ExperienceID int    `gorm:"not null"`
 	URL          string `gorm:"not null"`
 	Caption      string
-	SortOrder    int `gorm:"default:0"`
+	SortOrder    int `gorm:"not null;default:0"`
+	CreatedAt    time.Time
+	UpdatedAt    time.Time
+}
+
+// BeforeCreate hook for ExperienceImage
+func (ei *ExperienceImage) BeforeCreate(tx *gorm.DB) error {
+	if ei.ID == "" {
+		ei.ID = uuid.New().String()
+	}
+	return nil
 }
