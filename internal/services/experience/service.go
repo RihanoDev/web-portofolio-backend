@@ -3,12 +3,15 @@ package experience
 import (
 	"encoding/json"
 	"fmt"
+	"os"
 	"time"
 	"web-porto-backend/common/utils"
 	"web-porto-backend/internal/domain/dto"
 	"web-porto-backend/internal/domain/models"
 	experienceRepo "web-porto-backend/internal/repositories/experience"
 	tagService "web-porto-backend/internal/services/tag"
+
+	"gorm.io/gorm"
 )
 
 // Helper functions for parsing metadata
@@ -69,15 +72,18 @@ func parseFlexibleDate(dateStr string) (time.Time, error) {
 type Service struct {
 	experienceRepo experienceRepo.Repository
 	tagService     tagService.Service
+	db             *gorm.DB
 }
 
 func NewService(
 	experienceRepo experienceRepo.Repository,
 	tagService tagService.Service,
+	db *gorm.DB,
 ) *Service {
 	return &Service{
 		experienceRepo: experienceRepo,
 		tagService:     tagService,
+		db:             db,
 	}
 }
 
@@ -378,7 +384,14 @@ func (s *Service) UpdateExperience(id int, req dto.UpdateExperienceRequest) (*dt
 	if req.CompanyURL != nil && *req.CompanyURL != "" {
 		experience.CompanyURL = *req.CompanyURL
 	}
-	if req.LogoURL != nil && *req.LogoURL != "" {
+	if req.LogoURL != nil {
+		if *req.LogoURL == "" && experience.LogoURL != "" {
+			var media models.Media
+			if err := s.db.Where("file_url = ?", experience.LogoURL).First(&media).Error; err == nil {
+				os.Remove(media.FilePath)
+				s.db.Delete(&media)
+			}
+		}
 		experience.LogoURL = *req.LogoURL
 	}
 

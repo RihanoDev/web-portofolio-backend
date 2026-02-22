@@ -37,6 +37,16 @@ func NewHandler(db *gorm.DB, uploadDir string, baseURL string) *Handler {
 
 // Upload handles file upload, saves to disk, and records to DB
 func (h *Handler) Upload(c *gin.Context) {
+	// First handle old file deletion if requested
+	oldFileURL := c.PostForm("oldFileUrl")
+	if oldFileURL != "" {
+		var oldMedia models.Media
+		if err := h.db.Where("file_url = ?", oldFileURL).First(&oldMedia).Error; err == nil {
+			os.Remove(oldMedia.FilePath)
+			h.db.Delete(&oldMedia)
+		}
+	}
+
 	// Get file from request
 	file, header, err := c.Request.FormFile("file")
 	if err != nil {
