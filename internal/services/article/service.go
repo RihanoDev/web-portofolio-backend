@@ -128,12 +128,27 @@ func (s *Service) resolveTagIDs(tags []int, tagIds []int, tagIdStrs []string) ([
 	return []int{}, nil
 }
 
+// generateUniqueSlug memastikan slug unik di database; append -2, -3, dst jika sudah ada.
+func (s *Service) generateUniqueSlug(base string) string {
+	candidate := base
+	for i := 2; i <= 100; i++ {
+		existing, err := s.articleRepo.GetBySlug(candidate)
+		if err != nil || existing == nil {
+			return candidate
+		}
+		candidate = fmt.Sprintf("%s-%d", base, i)
+	}
+	return fmt.Sprintf("%s-%s", base, uuid.New().String()[:8])
+}
+
 // CreateArticle creates a new article
 func (s *Service) CreateArticle(req dto.CreateArticleRequest) (*dto.ArticleResponse, error) {
-	// Generate slug if not provided
-	if req.Slug == "" {
-		req.Slug = slug.Make(req.Title)
+	// Generate slug unik
+	baseSlug := req.Slug
+	if baseSlug == "" {
+		baseSlug = slug.Make(req.Title)
 	}
+	req.Slug = s.generateUniqueSlug(baseSlug)
 
 	// Calculate read time (words per minute: 200)
 	readTime := len(strings.Fields(req.Content)) / 200
@@ -336,23 +351,34 @@ func (s *Service) ListArticles(page, size int) (*dto.PaginatedResponse, error) {
 func (s *Service) UpdateArticle(id string, req dto.UpdateArticleRequest) (*dto.ArticleResponse, error) {
 	// Check if this is a new article (using temporary ID)
 	if len(id) > 0 && id[:5] == "temp-" {
-		// Create a new article instead
 		createReq := dto.CreateArticleRequest{
-			Title:            req.Title,
-			Slug:             req.Slug,
-			Excerpt:          req.Excerpt,
-			Content:          req.Content,
-			FeaturedImageURL: req.FeaturedImageURL,
-			Status:           req.Status,
-			AuthorID:         1, // Default to admin user
-			Categories:       req.Categories,
-			CategoryIds:      req.CategoryIds,
-			CategoryIdStrs:   req.CategoryIdStrs,
-			Tags:             req.Tags,
-			TagIds:           req.TagIds,
-			TagIdStrs:        req.TagIdStrs,
-			PublishAt:        req.PublishAt,
-			Metadata:         req.Metadata,
+			AuthorID:       1, // Default to admin user
+			Categories:     req.Categories,
+			CategoryIds:    req.CategoryIds,
+			CategoryIdStrs: req.CategoryIdStrs,
+			Tags:           req.Tags,
+			TagIds:         req.TagIds,
+			TagIdStrs:      req.TagIdStrs,
+			PublishAt:      req.PublishAt,
+			Metadata:       req.Metadata,
+		}
+		if req.Title != nil {
+			createReq.Title = *req.Title
+		}
+		if req.Slug != nil {
+			createReq.Slug = *req.Slug
+		}
+		if req.Excerpt != nil {
+			createReq.Excerpt = *req.Excerpt
+		}
+		if req.Content != nil {
+			createReq.Content = *req.Content
+		}
+		if req.FeaturedImageURL != nil {
+			createReq.FeaturedImageURL = *req.FeaturedImageURL
+		}
+		if req.Status != nil {
+			createReq.Status = *req.Status
 		}
 		return s.CreateArticle(createReq)
 	}
@@ -363,24 +389,32 @@ func (s *Service) UpdateArticle(id string, req dto.UpdateArticleRequest) (*dto.A
 		return nil, err
 	}
 
-	// Update ALL fields from request (allow empty values to be set)
-	article.Title = req.Title
-	article.Excerpt = req.Excerpt
-	article.Content = req.Content
-	article.FeaturedImageURL = req.FeaturedImageURL
+	if req.Title != nil {
+		article.Title = *req.Title
+	}
+	if req.Excerpt != nil {
+		article.Excerpt = *req.Excerpt
+	}
+	if req.Content != nil {
+		article.Content = *req.Content
+	}
+	if req.FeaturedImageURL != nil {
+		article.FeaturedImageURL = *req.FeaturedImageURL
+	}
 
-	// Update slug if provided, otherwise generate from title
-	if req.Slug != "" {
-		article.Slug = req.Slug
-	} else if req.Title != "" {
-		article.Slug = slug.Make(req.Title)
+	// Update slug jika disediakan, atau generate dari title dengan unique check
+	if req.Slug != nil && *req.Slug != "" {
+		article.Slug = *req.Slug
+	} else if req.Title != nil && *req.Title != "" && *req.Title != article.Title {
+		// Hanya re-generate slug jika title benar-benar berubah
+		article.Slug = s.generateUniqueSlug(slug.Make(*req.Title))
 	}
 
 	// Update status if provided
-	if req.Status != "" {
-		article.Status = req.Status
+	if req.Status != nil && *req.Status != "" {
+		article.Status = *req.Status
 		// Update published date if status changes to published
-		if req.Status == "published" && article.PublishedAt == nil {
+		if *req.Status == "published" && article.PublishedAt == nil {
 			now := time.Now()
 			article.PublishedAt = &now
 		}
@@ -392,8 +426,8 @@ func (s *Service) UpdateArticle(id string, req dto.UpdateArticleRequest) (*dto.A
 	}
 
 	// Recalculate read time if content changed
-	if req.Content != "" {
-		readTime := len(strings.Fields(req.Content)) / 200
+	if req.Content != nil && *req.Content != "" {
+		readTime := len(strings.Fields(*req.Content)) / 200
 		if readTime < 1 {
 			readTime = 1
 		}
@@ -452,7 +486,14 @@ func (s *Service) UpdateArticle(id string, req dto.UpdateArticleRequest) (*dto.A
 		return nil, err
 	}
 
-	return s.mapArticleToResponse(article), nil
+	// Reload dari DB agar mendapatkan Categories dan Tags yang terbaru
+	updatedArticle, err := s.articleRepo.GetByID(id)
+	if err != nil {
+		// Jika gagal reload, kembalikan response dengan data yang ada
+		return s.mapArticleToResponse(article), nil
+	}
+
+	return s.mapArticleToResponse(updatedArticle), nil
 }
 
 // DeleteArticle deletes an article by ID
@@ -596,18 +637,80 @@ func (s *Service) mapArticleToListResponse(article *models.Article) dto.ArticleL
 		ViewCount:        article.ViewCount,
 		PublishedAt:      article.PublishedAt,
 		CreatedAt:        article.CreatedAt,
+		Content:          article.Content,
 		Categories:       []string{},
+		CategoryModels:   []dto.CategoryResponse{},
 		Tags:             []string{},
+		TagModels:        []dto.TagResponse{},
+		Images:           []dto.ArticleImageResponse{},
+		Videos:           []dto.ArticleVideoResponse{},
+		Metadata:         make(map[string]interface{}),
 	}
 
 	// Add category names
 	for _, category := range article.Categories {
 		response.Categories = append(response.Categories, category.Name)
+		response.CategoryModels = append(response.CategoryModels, dto.CategoryResponse{
+			ID:   category.ID,
+			Name: category.Name,
+			Slug: category.Slug,
+		})
 	}
 
 	// Add tag names
 	for _, tag := range article.Tags {
 		response.Tags = append(response.Tags, tag.Name)
+		response.TagModels = append(response.TagModels, dto.TagResponse{
+			ID:   tag.ID,
+			Name: tag.Name,
+			Slug: tag.Slug,
+		})
+	}
+
+	// Parse the metadata JSON string and restore rich data
+	if article.Metadata != "" {
+		var metadata map[string]interface{}
+		if err := json.Unmarshal([]byte(article.Metadata), &metadata); err == nil {
+			response.Metadata = metadata
+
+			// Restore images from metadata
+			if imagesData, ok := metadata["images"].([]interface{}); ok {
+				for _, imgData := range imagesData {
+					if imgMap, ok := imgData.(map[string]interface{}); ok {
+						image := dto.ArticleImageResponse{
+							ID:        getString(imgMap, "id"),
+							URL:       getString(imgMap, "url"),
+							Caption:   getString(imgMap, "caption"),
+							AltText:   getString(imgMap, "altText"),
+							SortOrder: getInt(imgMap, "sortOrder"),
+						}
+						response.Images = append(response.Images, image)
+					}
+				}
+			}
+
+			// Restore videos from metadata
+			if videosData, ok := metadata["videos"].([]interface{}); ok {
+				for _, vidData := range videosData {
+					if vidMap, ok := vidData.(map[string]interface{}); ok {
+						video := dto.ArticleVideoResponse{
+							ID:        getString(vidMap, "id"),
+							URL:       getString(vidMap, "url"),
+							Caption:   getString(vidMap, "caption"),
+							SortOrder: getInt(vidMap, "sortOrder"),
+						}
+						response.Videos = append(response.Videos, video)
+					}
+				}
+			}
+
+			// Restore featured image URL from metadata if not set
+			if response.FeaturedImageURL == "" {
+				if featuredImageURL := getString(metadata, "featuredImageUrl"); featuredImageURL != "" {
+					response.FeaturedImageURL = featuredImageURL
+				}
+			}
+		}
 	}
 
 	return response

@@ -267,7 +267,7 @@ func (s *Service) ListExperiences(page, size int) (*dto.PaginatedResponse, error
 
 // UpdateExperience updates an existing experience entry
 func (s *Service) UpdateExperience(id int, req dto.UpdateExperienceRequest) (*dto.ExperienceResponse, error) {
-	fmt.Printf("[UpdateExperience] Updating id=%d title=%q startDate=%q endDate=%q current=%v techs(ids)=%v techs(names)=%v\n",
+	fmt.Printf("[UpdateExperience] Updating id=%d title=%v startDate=%v endDate=%v current=%v techs(ids)=%v techs(names)=%v\n",
 		id, req.Title, req.StartDate, req.EndDate, req.Current, req.TechnologyIDs, req.TechnologyNames)
 
 	// Get existing experience
@@ -278,19 +278,19 @@ func (s *Service) UpdateExperience(id int, req dto.UpdateExperienceRequest) (*dt
 	}
 
 	// Update fields if provided
-	if req.Title != "" {
-		experience.Title = req.Title
+	if req.Title != nil && *req.Title != "" {
+		experience.Title = *req.Title
 	}
-	if req.Company != "" {
-		experience.Company = req.Company
+	if req.Company != nil && *req.Company != "" {
+		experience.Company = *req.Company
 	}
-	if req.Location != "" {
-		experience.Location = req.Location
+	if req.Location != nil && *req.Location != "" {
+		experience.Location = *req.Location
 	}
-	if req.StartDate != "" {
-		startDate, err := parseFlexibleDate(req.StartDate)
+	if req.StartDate != nil && *req.StartDate != "" {
+		startDate, err := parseFlexibleDate(*req.StartDate)
 		if err != nil {
-			fmt.Printf("[UpdateExperience] startDate parse error: %v (input: %q)\n", err, req.StartDate)
+			fmt.Printf("[UpdateExperience] startDate parse error: %v (input: %q)\n", err, *req.StartDate)
 			return nil, fmt.Errorf("invalid startDate format: %v", err)
 		}
 		experience.StartDate = startDate
@@ -303,17 +303,17 @@ func (s *Service) UpdateExperience(id int, req dto.UpdateExperienceRequest) (*dt
 		// If marked as current, set end_date to null
 		if *req.Current {
 			experience.EndDate = nil
-		} else if req.EndDate != "" {
+		} else if req.EndDate != nil && *req.EndDate != "" {
 			// If not current and end_date provided, update it
-			endDate, err := parseFlexibleDate(req.EndDate)
+			endDate, err := parseFlexibleDate(*req.EndDate)
 			if err != nil {
 				return nil, fmt.Errorf("invalid endDate format: %v", err)
 			}
 			experience.EndDate = &endDate
 		}
-	} else if req.EndDate != "" {
+	} else if req.EndDate != nil && *req.EndDate != "" {
 		// If only end_date provided (current flag not changed)
-		endDate, err := parseFlexibleDate(req.EndDate)
+		endDate, err := parseFlexibleDate(*req.EndDate)
 		if err != nil {
 			return nil, fmt.Errorf("invalid endDate format: %v", err)
 		}
@@ -321,17 +321,17 @@ func (s *Service) UpdateExperience(id int, req dto.UpdateExperienceRequest) (*dt
 		experience.Current = false
 	}
 
-	if req.Description != "" {
-		experience.Description = req.Description
+	if req.Description != nil && *req.Description != "" {
+		experience.Description = *req.Description
 	}
 	if len(req.Responsibilities) > 0 {
 		experience.Responsibilities = models.StringArray(req.Responsibilities)
 	}
-	if req.CompanyURL != "" {
-		experience.CompanyURL = req.CompanyURL
+	if req.CompanyURL != nil && *req.CompanyURL != "" {
+		experience.CompanyURL = *req.CompanyURL
 	}
-	if req.LogoURL != "" {
-		experience.LogoURL = req.LogoURL
+	if req.LogoURL != nil && *req.LogoURL != "" {
+		experience.LogoURL = *req.LogoURL
 	}
 
 	// Handle technologies update - always update if provided
@@ -348,27 +348,26 @@ func (s *Service) UpdateExperience(id int, req dto.UpdateExperienceRequest) (*dt
 		}
 	}
 
-	// Generate comprehensive metadata JSON
+	// Generate comprehensive metadata JSON - always update
+	metadataContent := make(map[string]interface{})
+	if experience.Metadata != "" {
+		_ = json.Unmarshal([]byte(experience.Metadata), &metadataContent)
+	}
+	metadataContent["originalId"] = experience.ID
+	metadataContent["lastUpdated"] = time.Now()
+	metadataContent["version"] = 2
+	metadataContent["companyUrl"] = experience.CompanyURL
+	metadataContent["logoUrl"] = experience.LogoURL
+	metadataContent["responsibilities"] = []string(experience.Responsibilities)
+	// Merge user metadata jika ada
 	if req.Metadata != nil {
-		metadataBytes, err := json.Marshal(map[string]interface{}{
-			"originalId":       experience.ID,
-			"lastUpdated":      time.Now(),
-			"version":          2,
-			"title":            req.Title,
-			"company":          req.Company,
-			"location":         req.Location,
-			"description":      req.Description,
-			"companyUrl":       req.CompanyURL,
-			"logoUrl":          req.LogoURL,
-			"responsibilities": req.Responsibilities,
-			"startDate":        req.StartDate,
-			"endDate":          req.EndDate,
-			"current":          req.Current,
-			"userMetadata":     req.Metadata,
-		})
-		if err == nil {
-			experience.Metadata = string(metadataBytes)
+		for k, v := range req.Metadata {
+			metadataContent[k] = v
 		}
+	}
+	metadataBytes, err := json.Marshal(metadataContent)
+	if err == nil {
+		experience.Metadata = string(metadataBytes)
 	}
 
 	// Update the experience
@@ -376,7 +375,14 @@ func (s *Service) UpdateExperience(id int, req dto.UpdateExperienceRequest) (*dt
 		return nil, err
 	}
 
-	return s.mapToResponse(experience), nil
+	// Reload dari DB agar mendapatkan Technologies yang terbaru
+	updatedExp, err := s.experienceRepo.GetByID(id)
+	if err != nil {
+		// Jika gagal reload, kembalikan hasil mapToResponse dengan data yang ada
+		return s.mapToResponse(experience), nil
+	}
+
+	return s.mapToResponse(updatedExp), nil
 }
 
 // DeleteExperience deletes an experience entry

@@ -118,12 +118,31 @@ func (s *Service) resolveTechnologies(technologies []int, technologyNames []stri
 	return []int{}, nil
 }
 
+// generateUniqueSlug memastikan slug yang dihasilkan unik di database.
+// Jika slug sudah ada, tambahkan suffix -2, -3, dst.
+func (s *Service) generateUniqueSlug(base string) string {
+	candidate := base
+	for i := 2; i <= 100; i++ {
+		existing, err := s.projectRepo.GetBySlug(candidate)
+		if err != nil || existing == nil {
+			// Slug belum dipakai — bisa digunakan
+			return candidate
+		}
+		// Sudah ada, coba suffix berikutnya
+		candidate = fmt.Sprintf("%s-%d", base, i)
+	}
+	// Fallback: tambah UUID pendek agar tetap unik
+	return fmt.Sprintf("%s-%s", base, uuid.New().String()[:8])
+}
+
 // CreateProject creates a new project
 func (s *Service) CreateProject(req dto.CreateProjectRequest) (*dto.ProjectResponse, error) {
-	// Generate slug if not provided
-	if req.Slug == "" {
-		req.Slug = slug.Make(req.Title)
+	// Generate slug unik jika tidak disediakan
+	baseSlug := req.Slug
+	if baseSlug == "" {
+		baseSlug = slug.Make(req.Title)
 	}
+	req.Slug = s.generateUniqueSlug(baseSlug)
 
 	// Use default authorID if not provided - get from database
 	authorID := req.AuthorID
@@ -464,12 +483,18 @@ func (s *Service) ListProjects(page, size int) (*dto.PaginatedResponse, error) {
 			Title:        project.Title,
 			Slug:         project.Slug,
 			Description:  project.Description,
+			Content:      project.Content,
 			ThumbnailURL: project.ThumbnailURL,
 			Status:       project.Status,
+			CategoryID:   project.CategoryID,
 			AuthorName:   "user", // Default username
 			GitHubURL:    project.GitHubURL,
 			LiveDemoURL:  project.LiveDemoURL,
-			Technologies: []string{}, // Initialize empty array
+			Tags:         make([]dto.TagResponse, 0), // Initialize empty array
+			Technologies: []string{},                 // Initialize empty array
+			Images:       []dto.ProjectImageResponse{},
+			Videos:       []dto.ProjectVideoResponse{},
+			Metadata:     make(map[string]interface{}),
 			CreatedAt:    project.CreatedAt,
 		}
 
@@ -482,6 +507,8 @@ func (s *Service) ListProjects(page, size int) (*dto.PaginatedResponse, error) {
 		if project.Metadata != "" {
 			var metadata map[string]interface{}
 			if err := json.Unmarshal([]byte(project.Metadata), &metadata); err == nil {
+				listResponse.Metadata = metadata
+
 				// Restore URLs from metadata if not set
 				if listResponse.GitHubURL == "" {
 					if githubURL := getString(metadata, "githubUrl"); githubURL != "" {
@@ -505,6 +532,36 @@ func (s *Service) ListProjects(page, size int) (*dto.PaginatedResponse, error) {
 					}
 				}
 
+				// Restore images from metadata
+				if imagesData, ok := metadata["images"].([]interface{}); ok {
+					for _, imgData := range imagesData {
+						if imgMap, ok := imgData.(map[string]interface{}); ok {
+							image := dto.ProjectImageResponse{
+								ID:        getString(imgMap, "id"),
+								URL:       getString(imgMap, "url"),
+								Caption:   getString(imgMap, "caption"),
+								SortOrder: getInt(imgMap, "sortOrder"),
+							}
+							listResponse.Images = append(listResponse.Images, image)
+						}
+					}
+				}
+
+				// Restore videos from metadata
+				if videosData, ok := metadata["videos"].([]interface{}); ok {
+					for _, vidData := range videosData {
+						if vidMap, ok := vidData.(map[string]interface{}); ok {
+							video := dto.ProjectVideoResponse{
+								ID:        getString(vidMap, "id"),
+								URL:       getString(vidMap, "url"),
+								Caption:   getString(vidMap, "caption"),
+								SortOrder: getInt(vidMap, "sortOrder"),
+							}
+							listResponse.Videos = append(listResponse.Videos, video)
+						}
+					}
+				}
+
 				// Keep metadata technologies as additional info only
 			}
 		}
@@ -512,6 +569,11 @@ func (s *Service) ListProjects(page, size int) (*dto.PaginatedResponse, error) {
 		// Add technologies from relational tags (primary source)
 		for _, tag := range project.Tags {
 			listResponse.Technologies = append(listResponse.Technologies, tag.Name)
+			listResponse.Tags = append(listResponse.Tags, dto.TagResponse{
+				ID:   tag.ID,
+				Name: tag.Name,
+				Slug: tag.Slug,
+			})
 		}
 
 		projectList = append(projectList, listResponse)
@@ -539,18 +601,34 @@ func (s *Service) UpdateProject(id string, req dto.UpdateProjectRequest) (*dto.P
 	if len(id) > 0 && id[:5] == "temp-" {
 		// Create a new project instead
 		createReq := dto.CreateProjectRequest{
-			Title:           req.Title,
-			Slug:            req.Slug,
-			Description:     req.Description,
-			Content:         req.Content,
-			ThumbnailURL:    req.ThumbnailURL,
-			Status:          req.Status,
 			CategoryID:      req.CategoryID,
-			GitHubURL:       req.GitHubURL,
-			LiveDemoURL:     req.LiveDemoURL,
 			Technologies:    req.Technologies,
 			TechnologyNames: req.TechnologyNames,
 			Metadata:        req.Metadata,
+		}
+		if req.Title != nil {
+			createReq.Title = *req.Title
+		}
+		if req.Slug != nil {
+			createReq.Slug = *req.Slug
+		}
+		if req.Description != nil {
+			createReq.Description = *req.Description
+		}
+		if req.Content != nil {
+			createReq.Content = *req.Content
+		}
+		if req.ThumbnailURL != nil {
+			createReq.ThumbnailURL = *req.ThumbnailURL
+		}
+		if req.Status != nil {
+			createReq.Status = *req.Status
+		}
+		if req.GitHubURL != nil {
+			createReq.GitHubURL = *req.GitHubURL
+		}
+		if req.LiveDemoURL != nil {
+			createReq.LiveDemoURL = *req.LiveDemoURL
 		}
 		return s.CreateProject(createReq)
 	}
@@ -561,40 +639,59 @@ func (s *Service) UpdateProject(id string, req dto.UpdateProjectRequest) (*dto.P
 		return nil, err
 	}
 
-	// Update ALL fields from request (allow empty values to be set)
-	project.Title = req.Title
-	project.Description = req.Description
-	project.Content = req.Content
-	project.ThumbnailURL = req.ThumbnailURL
-	project.GitHubURL = req.GitHubURL
-	project.LiveDemoURL = req.LiveDemoURL
+	if req.Title != nil {
+		project.Title = *req.Title
+	}
+	if req.Description != nil {
+		project.Description = *req.Description
+	}
+	if req.Content != nil {
+		project.Content = *req.Content
+	}
+	if req.ThumbnailURL != nil {
+		project.ThumbnailURL = *req.ThumbnailURL
+	}
+	if req.GitHubURL != nil {
+		project.GitHubURL = *req.GitHubURL
+	}
+	if req.LiveDemoURL != nil {
+		project.LiveDemoURL = *req.LiveDemoURL
+	}
 
-	// Update slug if provided, otherwise generate from title
-	if req.Slug != "" {
-		project.Slug = req.Slug
-	} else if req.Title != "" {
-		project.Slug = slug.Make(req.Title)
+	// Update slug jika disediakan, atau generate dari title dengan unique check
+	if req.Slug != nil && *req.Slug != "" {
+		project.Slug = *req.Slug
+	} else if req.Title != nil && *req.Title != "" && *req.Title != project.Title {
+		// Hanya re-generate slug jika title benar-benar berubah
+		project.Slug = s.generateUniqueSlug(slug.Make(*req.Title))
 	}
 
 	// Update status and category if provided
-	if req.Status != "" {
-		project.Status = req.Status
+	if req.Status != nil && *req.Status != "" {
+		project.Status = *req.Status
 	}
 	if req.CategoryID != nil {
 		project.CategoryID = req.CategoryID
 	}
 
 	// Update metadata - always set to ensure it's updated
-	if req.Metadata != nil {
-		metadataJSON, err := json.Marshal(req.Metadata)
-		if err != nil {
-			return nil, fmt.Errorf("failed to marshal metadata: %v", err)
-		}
-		project.Metadata = string(metadataJSON)
-	} else {
-		// Set empty JSON object if no metadata provided
-		project.Metadata = "{}"
+	metaMap := make(map[string]interface{})
+	if project.Metadata != "" {
+		_ = json.Unmarshal([]byte(project.Metadata), &metaMap)
 	}
+
+	metaMap["githubUrl"] = project.GitHubURL
+	metaMap["liveDemoUrl"] = project.LiveDemoURL
+	if req.Metadata != nil {
+		for k, v := range req.Metadata {
+			metaMap[k] = v
+		}
+	}
+	metadataJSON, err := json.Marshal(metaMap)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal metadata: %v", err)
+	}
+	project.Metadata = string(metadataJSON)
 
 	// Handle technologies update - always update if provided
 	if len(req.Technologies) > 0 || len(req.TechnologyNames) > 0 {
@@ -620,35 +717,31 @@ func (s *Service) UpdateProject(id string, req dto.UpdateProjectRequest) (*dto.P
 		return nil, err
 	}
 
-	// Create response
-	response := &dto.ProjectResponse{
-		ID:           project.ID,
-		Title:        project.Title,
-		Slug:         project.Slug,
-		Description:  project.Description,
-		Content:      project.Content,
-		ThumbnailURL: project.ThumbnailURL,
-		Status:       project.Status,
-		GitHubURL:    project.GitHubURL,
-		LiveDemoURL:  project.LiveDemoURL,
-		CreatedAt:    project.CreatedAt,
-		UpdatedAt:    project.UpdatedAt,
-		Author: dto.AuthorResponse{
-			ID:       project.AuthorID,
-			Username: "user", // Default username
-		},
+	// Reload project dari DB agar mendapatkan Tags (technologies) yang terbaru
+	updatedProject, err := s.projectRepo.GetByID(project.ID)
+	if err != nil {
+		// Jika gagal reload, kembalikan response tanpa technologies
+		return &dto.ProjectResponse{
+			ID:           project.ID,
+			Title:        project.Title,
+			Slug:         project.Slug,
+			Description:  project.Description,
+			Content:      project.Content,
+			ThumbnailURL: project.ThumbnailURL,
+			Status:       project.Status,
+			GitHubURL:    project.GitHubURL,
+			LiveDemoURL:  project.LiveDemoURL,
+			CreatedAt:    project.CreatedAt,
+			UpdatedAt:    project.UpdatedAt,
+			Author: dto.AuthorResponse{
+				ID:       project.AuthorID,
+				Username: "user",
+			},
+		}, nil
 	}
 
-	// Add category if available
-	if project.Category != nil {
-		response.Category = &dto.CategoryResponse{
-			ID:   *project.CategoryID,
-			Name: project.Category.Name,
-			Slug: project.Category.Slug,
-		}
-	}
-
-	return response, nil
+	// Gunakan GetProjectByID untuk membangun response lengkap dengan technologies
+	return s.GetProjectByID(updatedProject.ID)
 }
 
 // DeleteProject deletes a project by ID

@@ -35,7 +35,7 @@ func NewServiceRegistry(repo *repositories.RepositoryRegistry) *ServiceRegistry 
 	tagService := tagSrvc.NewService(repo.TagRepository)
 
 	return &ServiceRegistry{
-		AnalyticsService: analyticsSrvc.NewService(repo.AnalyticsRepository),
+		AnalyticsService: analyticsSrvc.NewService(repo.AnalyticsRepository, analyticsSrvc.NewContentViewService(repo.DB)),
 		ArticleService: articleSrvc.NewService(
 			repo.ArticleRepository,
 			repo.CategoryRepository,

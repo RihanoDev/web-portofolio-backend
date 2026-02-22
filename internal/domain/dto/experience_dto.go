@@ -20,18 +20,18 @@ type CreateExperienceRequest struct {
 }
 
 type UpdateExperienceRequest struct {
-	Title            string                 `json:"title"`
-	Company          string                 `json:"company"`
-	Location         string                 `json:"location"`
-	StartDate        string                 `json:"startDate"` // Format: "YYYY-MM-DD"
-	EndDate          string                 `json:"endDate"`   // Format: "YYYY-MM-DD"
+	Title            *string                `json:"title"`
+	Company          *string                `json:"company"`
+	Location         *string                `json:"location"`
+	StartDate        *string                `json:"startDate"` // Format: "YYYY-MM-DD"
+	EndDate          *string                `json:"endDate"`   // Format: "YYYY-MM-DD"
 	Current          *bool                  `json:"current"`
-	Description      string                 `json:"description"`
+	Description      *string                `json:"description"`
 	Responsibilities []string               `json:"responsibilities"` // Keep as JSON for flexibility
 	TechnologyIDs    []int                  `json:"technologyIds"`    // Tag IDs (preferred)
 	TechnologyNames  []string               `json:"technologyNames"`  // Alternative: Tag names
-	CompanyURL       string                 `json:"companyUrl"`
-	LogoURL          string                 `json:"logoUrl"`
+	CompanyURL       *string                `json:"companyUrl"`
+	LogoURL          *string                `json:"logoUrl"`
 	Metadata         map[string]interface{} `json:"metadata"`
 }
 

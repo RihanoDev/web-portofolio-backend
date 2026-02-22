@@ -24,15 +24,15 @@ type CreateProjectRequest struct {
 }
 
 type UpdateProjectRequest struct {
-	Title           string                 `json:"title"`
-	Slug            string                 `json:"slug"`
-	Description     string                 `json:"description"`
-	Content         string                 `json:"content"`
-	ThumbnailURL    string                 `json:"thumbnailUrl"`
-	Status          string                 `json:"status" validate:"omitempty,oneof=draft published private"`
+	Title           *string                `json:"title"`
+	Slug            *string                `json:"slug"`
+	Description     *string                `json:"description"`
+	Content         *string                `json:"content"`
+	ThumbnailURL    *string                `json:"thumbnailUrl"`
+	Status          *string                `json:"status" validate:"omitempty,oneof=draft published private"`
 	CategoryID      *int                   `json:"categoryId"`
-	GitHubURL       string                 `json:"githubUrl"`
-	LiveDemoURL     string                 `json:"liveDemoUrl"`
+	GitHubURL       *string                `json:"githubUrl"`
+	LiveDemoURL     *string                `json:"liveDemoUrl"`
 	Technologies    []int                  `json:"technologies"`    // Tag IDs (preferred)
 	TechnologyNames []string               `json:"technologyNames"` // Alternative: Tag names
 	Metadata        map[string]interface{} `json:"metadata"`
@@ -85,16 +85,22 @@ type ProjectVideoResponse struct {
 }
 
 type ProjectListResponse struct {
-	ID           string    `json:"id"`
-	Title        string    `json:"title"`
-	Slug         string    `json:"slug"`
-	Description  string    `json:"description"`
-	ThumbnailURL string    `json:"thumbnailUrl"`
-	Status       string    `json:"status"`
-	Category     string    `json:"category,omitempty"`
-	AuthorName   string    `json:"authorName"`
-	Technologies []string  `json:"technologies"`
-	GitHubURL    string    `json:"githubUrl"`
-	LiveDemoURL  string    `json:"liveDemoUrl"`
-	CreatedAt    time.Time `json:"createdAt"`
+	ID           string                 `json:"id"`
+	Title        string                 `json:"title"`
+	Slug         string                 `json:"slug"`
+	Description  string                 `json:"description"`
+	ThumbnailURL string                 `json:"thumbnailUrl"`
+	Status       string                 `json:"status"`
+	CategoryID   *int                   `json:"categoryId,omitempty"`
+	Category     string                 `json:"category,omitempty"`
+	AuthorName   string                 `json:"authorName"`
+	Tags         []TagResponse          `json:"tags,omitempty"`
+	Technologies []string               `json:"technologies"`
+	GitHubURL    string                 `json:"githubUrl"`
+	LiveDemoURL  string                 `json:"liveDemoUrl"`
+	Content      string                 `json:"content"`
+	Metadata     map[string]interface{} `json:"metadata"`
+	Images       []ProjectImageResponse `json:"images"`
+	Videos       []ProjectVideoResponse `json:"videos"`
+	CreatedAt    time.Time              `json:"createdAt"`
 }

@@ -143,6 +143,9 @@ func main() {
 	logger := logrus.New()
 	router.Use(middleware.Logger(logger))
 
+	// Add response encoding middleware (encodes /api/v1/* responses to Base64)
+	router.Use(middleware.EncodeResponse())
+
 	// Register API routes
 	routes.SetupRoutes(router, handlerRegistry, authService)
 

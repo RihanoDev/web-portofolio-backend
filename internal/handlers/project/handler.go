@@ -184,19 +184,36 @@ func (h *Handler) Update(c *gin.Context) {
 	if len(id) > 0 && id[:5] == "temp-" {
 		// Create new project instead with the same data
 		createReq := dto.CreateProjectRequest{
-			Title:           req.Title,
-			Slug:            req.Slug,
-			Description:     req.Description,
-			Content:         req.Content,
-			ThumbnailURL:    req.ThumbnailURL,
-			Status:          req.Status,
 			CategoryID:      req.CategoryID,
-			GitHubURL:       req.GitHubURL,
-			LiveDemoURL:     req.LiveDemoURL,
 			Technologies:    req.Technologies,
 			TechnologyNames: req.TechnologyNames,
 			AuthorID:        0, // Will be set by service using default admin
 			Metadata:        req.Metadata,
+		}
+
+		if req.Title != nil {
+			createReq.Title = *req.Title
+		}
+		if req.Slug != nil {
+			createReq.Slug = *req.Slug
+		}
+		if req.Description != nil {
+			createReq.Description = *req.Description
+		}
+		if req.Content != nil {
+			createReq.Content = *req.Content
+		}
+		if req.ThumbnailURL != nil {
+			createReq.ThumbnailURL = *req.ThumbnailURL
+		}
+		if req.Status != nil {
+			createReq.Status = *req.Status
+		}
+		if req.GitHubURL != nil {
+			createReq.GitHubURL = *req.GitHubURL
+		}
+		if req.LiveDemoURL != nil {
+			createReq.LiveDemoURL = *req.LiveDemoURL
 		}
 
 		project, err := h.service.CreateProject(createReq)
@@ -221,6 +238,34 @@ func (h *Handler) Update(c *gin.Context) {
 	}
 
 	h.httpAdapter.SendSuccessResponse(c, http.StatusOK, project, "Project updated successfully")
+}
+
+// Patch partially updates a project
+func (h *Handler) Patch(c *gin.Context) {
+	id := c.Param("id")
+	if id == "" {
+		c.JSON(http.StatusBadRequest, response.NewErrorResponse(msgIDRequired))
+		return
+	}
+
+	var req dto.UpdateProjectRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, response.NewErrorResponse(msgInvalidRequestData, err.Error()))
+		return
+	}
+
+	// Service.UpdateProject currently implements partial update logic correctly via nil-pointer checks
+	project, err := h.service.UpdateProject(id, req)
+	if err != nil {
+		if err.Error() == "record not found" {
+			c.JSON(http.StatusNotFound, response.NewErrorResponse(msgProjectNotFound, err.Error()))
+			return
+		}
+		c.JSON(http.StatusInternalServerError, response.NewErrorResponse("Failed to partially update project", err.Error()))
+		return
+	}
+
+	h.httpAdapter.SendSuccessResponse(c, http.StatusOK, project, "Project partially updated successfully")
 }
 
 // Delete deletes a project

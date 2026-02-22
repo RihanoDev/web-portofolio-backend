@@ -1,4 +1,7 @@
--- +goose Up
+2026/02/22 19:24:54 Running SQL migrations (database_schema)...
+
+2026/02/22 19:24:54 [31;1mC:/Rizky/portofolio/web-porto/web-portofolio-backend/internal/migrations/migrate.go:92 [35;1mERROR: column "technologies" of relation "experiences" does not exist (SQLSTATE 42703)
+[0m[33m[16.610ms] [34;1m[rows:0][0m 
 -- Seed sample categories (if they don't exist)
 INSERT INTO categories (name, slug, description) VALUES 
 ('Web Development', 'web-development', 'Projects related to web development')
@@ -89,7 +92,7 @@ WHERE u.email = 'admin@example.com'
 AND NOT EXISTS (SELECT 1 FROM articles WHERE slug = 'modern-frontend-development-react-typescript');
 
 -- Seed sample experiences
-INSERT INTO experiences (title, company, location, start_date, end_date, current, description, responsibilities, company_url) 
+INSERT INTO experiences (title, company, location, start_date, end_date, current, description, responsibilities, technologies, company_url) 
 SELECT 
     'Senior Full Stack Developer',
     'Tech Solutions Inc.',
@@ -99,10 +102,11 @@ SELECT
     true,
     'Leading the development of scalable web applications and mentoring junior developers.',
     to_jsonb(ARRAY['Lead development team of 5 developers', 'Architect and implement new features', 'Code review and quality assurance', 'Collaborate with product and design teams', 'Optimize application performance']),
+    to_jsonb(ARRAY['React', 'TypeScript', 'Node.js', 'PostgreSQL', 'Docker', 'AWS']),
     'https://techsolutions.example.com'
 WHERE NOT EXISTS (SELECT 1 FROM experiences WHERE company = 'Tech Solutions Inc.' AND title = 'Senior Full Stack Developer');
 
-INSERT INTO experiences (title, company, location, start_date, end_date, current, description, responsibilities, company_url) 
+INSERT INTO experiences (title, company, location, start_date, end_date, current, description, responsibilities, technologies, company_url) 
 SELECT 
     'Full Stack Developer',
     'Digital Agency Pro',
@@ -112,10 +116,11 @@ SELECT
     false,
     'Developed and maintained multiple client projects using modern web technologies.',
     to_jsonb(ARRAY['Develop responsive web applications', 'Integrate third-party APIs', 'Database design and optimization', 'Deploy applications to cloud platforms', 'Client communication and requirement gathering']),
+    to_jsonb(ARRAY['Vue.js', 'PHP', 'Laravel', 'MySQL', 'JavaScript', 'CSS']),
     'https://digitalagencypro.example.com'
 WHERE NOT EXISTS (SELECT 1 FROM experiences WHERE company = 'Digital Agency Pro' AND title = 'Full Stack Developer');
 
-INSERT INTO experiences (title, company, location, start_date, end_date, current, description, responsibilities, company_url) 
+INSERT INTO experiences (title, company, location, start_date, end_date, current, description, responsibilities, technologies, company_url) 
 SELECT 
     'Junior Software Developer',
     'StartupXYZ',
@@ -125,6 +130,7 @@ SELECT
     false,
     'Started my career as a junior developer working on various web development projects.',
     to_jsonb(ARRAY['Implement frontend components', 'Write unit tests', 'Bug fixing and maintenance', 'Participate in agile development process', 'Learn new technologies and frameworks']),
+    to_jsonb(ARRAY['HTML', 'CSS', 'JavaScript', 'Python', 'Django', 'Git']),
     'https://startupxyz.example.com'
 WHERE NOT EXISTS (SELECT 1 FROM experiences WHERE company = 'StartupXYZ' AND title = 'Junior Software Developer');
 
@@ -150,18 +156,5 @@ SELECT a.id, t.id
 FROM articles a, tags t 
 WHERE a.slug = 'modern-frontend-development-react-typescript' AND t.slug IN ('react', 'typescript');
 
--- +goose Down
--- Remove seeded data
-DELETE FROM project_technologies WHERE project_id IN (
-    SELECT id FROM projects WHERE slug IN ('portfolio-cms-system', 'task-management-api')
-);
-
-DELETE FROM article_tags WHERE article_id IN (
-    SELECT id FROM articles WHERE slug IN ('building-scalable-web-applications-go', 'modern-frontend-development-react-typescript')
-);
-
-DELETE FROM experiences WHERE company IN ('Tech Solutions Inc.', 'Digital Agency Pro', 'StartupXYZ');
-DELETE FROM articles WHERE slug IN ('building-scalable-web-applications-go', 'modern-frontend-development-react-typescript');
-DELETE FROM projects WHERE slug IN ('portfolio-cms-system', 'task-management-api');
-DELETE FROM tags WHERE slug IN ('react', 'typescript', 'go', 'postgresql', 'docker', 'vuejs', 'nodejs', 'python');
-DELETE FROM categories WHERE slug IN ('web-development', 'mobile-development', 'devops');
+2026/02/22 19:24:54 Failed running migrations:exec database_schema\018_seed_sample_data.sql: ERROR: column "technologies" of relation "experiences" does not exist (SQLSTATE 42703)
+exit status 1

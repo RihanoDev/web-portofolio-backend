@@ -184,17 +184,29 @@ func (h *Handler) Update(c *gin.Context) {
 	if len(id) > 0 && id[:5] == "temp-" {
 		// Create new article instead with the same data
 		createReq := dto.CreateArticleRequest{
-			Title:            req.Title,
-			Slug:             req.Slug,
-			Excerpt:          req.Excerpt,
-			Content:          req.Content,
-			FeaturedImageURL: req.FeaturedImageURL,
-			Status:           req.Status,
-			Categories:       req.Categories,
-			Tags:             req.Tags,
-			PublishAt:        req.PublishAt,
-			AuthorID:         0, // Will be set by service using default admin
-			Metadata:         req.Metadata,
+			Categories: req.Categories,
+			Tags:       req.Tags,
+			PublishAt:  req.PublishAt,
+			AuthorID:   0, // Will be set by service using default admin
+			Metadata:   req.Metadata,
+		}
+		if req.Title != nil {
+			createReq.Title = *req.Title
+		}
+		if req.Slug != nil {
+			createReq.Slug = *req.Slug
+		}
+		if req.Excerpt != nil {
+			createReq.Excerpt = *req.Excerpt
+		}
+		if req.Content != nil {
+			createReq.Content = *req.Content
+		}
+		if req.FeaturedImageURL != nil {
+			createReq.FeaturedImageURL = *req.FeaturedImageURL
+		}
+		if req.Status != nil {
+			createReq.Status = *req.Status
 		}
 
 		article, err := h.service.CreateArticle(createReq)
@@ -219,6 +231,11 @@ func (h *Handler) Update(c *gin.Context) {
 	}
 
 	h.httpAdapter.SendSuccessResponse(c, http.StatusOK, article, "Article updated successfully")
+}
+
+// Patch partially updates an article (alias to Update)
+func (h *Handler) Patch(c *gin.Context) {
+	h.Update(c)
 }
 
 // Delete deletes an article
