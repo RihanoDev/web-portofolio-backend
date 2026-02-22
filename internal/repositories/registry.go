@@ -26,6 +26,7 @@ type RepositoryRegistry struct {
 	ProjectRepository    projectRepo.Repository
 	SettingRepository    settingRepo.Repository
 	TagRepository        tagRepo.Repository
+	DB                   *gorm.DB
 }
 
 func NewRepositoryRegistry(db *gorm.DB) *RepositoryRegistry {
@@ -40,5 +41,6 @@ func NewRepositoryRegistry(db *gorm.DB) *RepositoryRegistry {
 		ProjectRepository:    projectRepo.NewRepository(db),
 		SettingRepository:    settingRepo.NewRepository(db),
 		TagRepository:        tagRepo.NewRepository(db),
+		DB:                   db,
 	}
 }
