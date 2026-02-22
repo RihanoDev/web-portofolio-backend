@@ -15,6 +15,8 @@ type Project struct {
 	Content      string `gorm:"type:text"`
 	ThumbnailURL string
 	Status       string     `gorm:"not null;default:'published'"`
+	CategoryID   *int       `gorm:"index"`
+	Category     Category   `gorm:"foreignKey:CategoryID"`
 	Categories   []Category `gorm:"many2many:project_categories;"`
 	AuthorID     int
 	Author       User           `gorm:"foreignKey:AuthorID"`

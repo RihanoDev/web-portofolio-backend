@@ -58,7 +58,7 @@ func (r *repository) Update(experience *models.Experience) error {
 		experience.ID, experience.Responsibilities)
 	// Use Select("*") to force update all columns, including those that might have zero values
 	// Omit Technologies because updating associations should be done separately (via UpdateExperienceTechnologies)
-	err := r.db.Model(experience).Select("*").Omit("Technologies").Updates(experience).Error
+	err := r.db.Model(experience).Select("*").Omit("Technologies", "Images").Updates(experience).Error
 	if err != nil {
 		fmt.Printf("[ExperienceRepo.Update] GORM Update error for id=%d: %v\n", experience.ID, err)
 	}
@@ -115,9 +115,15 @@ func (r *repository) UpdateExperienceTechnologies(experienceID int, technologyID
 }
 
 func (r *repository) UpdateExperienceImages(experienceID int, images []models.ExperienceImage) error {
-	var experience models.Experience
-	if err := r.db.First(&experience, experienceID).Error; err != nil {
-		return err
-	}
-	return r.db.Model(&experience).Association("Images").Replace(images)
+	return r.db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Where("experience_id = ?", experienceID).Delete(&models.ExperienceImage{}).Error; err != nil {
+			return err
+		}
+		if len(images) > 0 {
+			if err := tx.Create(&images).Error; err != nil {
+				return err
+			}
+		}
+		return nil
+	})
 }

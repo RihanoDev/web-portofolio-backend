@@ -16,6 +16,7 @@ type Repository interface {
 	GetByAuthorID(authorID int, limit, offset int) ([]*models.Article, int64, error)
 	GetPublished(limit, offset int) ([]*models.Article, int64, error)
 	GetByCategory(categoryID int, limit, offset int) ([]*models.Article, int64, error)
+	GetByTag(tagID int, limit, offset int) ([]*models.Article, int64, error)
 	UpdateArticleCategories(articleID string, categoryIDs []int) error
 	UpdateArticleTags(articleID string, tagIDs []int) error
 	UpdateArticleImages(articleID string, images []models.ArticleImage) error
@@ -196,48 +197,52 @@ func (r *repository) GetByTag(tagID int, limit, offset int) ([]*models.Article, 
 
 func (r *repository) UpdateArticleCategories(articleID string, categoryIDs []int) error {
 	var article models.Article
-	if err := r.db.Where("id = ?", articleID).First(&article).Error; err != nil {
+	if err := r.db.First(&article, "id = ?", articleID).Error; err != nil {
 		return err
 	}
-
 	var categories []models.Category
 	if len(categoryIDs) > 0 {
-		if err := r.db.Where("id IN ?", categoryIDs).Find(&categories).Error; err != nil {
-			return err
-		}
+		r.db.Where("id IN ?", categoryIDs).Find(&categories)
 	}
-
 	return r.db.Model(&article).Association("Categories").Replace(categories)
 }
 
 func (r *repository) UpdateArticleTags(articleID string, tagIDs []int) error {
 	var article models.Article
-	if err := r.db.Where("id = ?", articleID).First(&article).Error; err != nil {
+	if err := r.db.First(&article, "id = ?", articleID).Error; err != nil {
 		return err
 	}
-
 	var tags []models.Tag
 	if len(tagIDs) > 0 {
-		if err := r.db.Where("id IN ?", tagIDs).Find(&tags).Error; err != nil {
-			return err
-		}
+		r.db.Where("id IN ?", tagIDs).Find(&tags)
 	}
-
 	return r.db.Model(&article).Association("Tags").Replace(tags)
 }
 
 func (r *repository) UpdateArticleImages(articleID string, images []models.ArticleImage) error {
-	var article models.Article
-	if err := r.db.Where("id = ?", articleID).First(&article).Error; err != nil {
-		return err
-	}
-	return r.db.Model(&article).Association("Images").Replace(images)
+	return r.db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Where("article_id = ?", articleID).Delete(&models.ArticleImage{}).Error; err != nil {
+			return err
+		}
+		if len(images) > 0 {
+			if err := tx.Create(&images).Error; err != nil {
+				return err
+			}
+		}
+		return nil
+	})
 }
 
 func (r *repository) UpdateArticleVideos(articleID string, videos []models.ArticleVideo) error {
-	var article models.Article
-	if err := r.db.Where("id = ?", articleID).First(&article).Error; err != nil {
-		return err
-	}
-	return r.db.Model(&article).Association("Videos").Replace(videos)
+	return r.db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Where("article_id = ?", articleID).Delete(&models.ArticleVideo{}).Error; err != nil {
+			return err
+		}
+		if len(videos) > 0 {
+			if err := tx.Create(&videos).Error; err != nil {
+				return err
+			}
+		}
+		return nil
+	})
 }

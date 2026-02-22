@@ -40,7 +40,13 @@ func (r *repository) GetByID(id string) (*models.Project, error) {
 	}
 
 	var project models.Project
-	err := r.db.Preload("Author").Preload("Categories").Preload("Tags").Preload("Images").Preload("Videos").Where("id = ?", id).First(&project).Error
+	err := r.db.Preload("Author").
+		Preload("Category").
+		Preload("Categories").
+		Preload("Tags").
+		Preload("Images").
+		Preload("Videos").
+		Where("id = ?", id).First(&project).Error
 	if err != nil {
 		return nil, err
 	}
@@ -55,7 +61,12 @@ func (r *repository) GetAll(limit, offset int) ([]*models.Project, int64, error)
 	r.db.Model(&models.Project{}).Count(&total)
 
 	// Get paginated results with preloaded associations
-	err := r.db.Preload("Author").Preload("Categories").Preload("Tags").Preload("Images").Preload("Videos").
+	err := r.db.Preload("Author").
+		Preload("Category").
+		Preload("Categories").
+		Preload("Tags").
+		Preload("Images").
+		Preload("Videos").
 		Limit(limit).Offset(offset).Find(&projects).Error
 
 	return projects, total, err
@@ -102,7 +113,12 @@ func (r *repository) Delete(id string) error {
 
 func (r *repository) GetBySlug(slug string) (*models.Project, error) {
 	var project models.Project
-	err := r.db.Preload("Author").Preload("Categories").Preload("Tags").Preload("Images").Preload("Videos").
+	err := r.db.Preload("Author").
+		Preload("Category").
+		Preload("Categories").
+		Preload("Tags").
+		Preload("Images").
+		Preload("Videos").
 		Where("slug = ?", slug).First(&project).Error
 	if err != nil {
 		return nil, err
@@ -167,20 +183,29 @@ func (r *repository) UpdateProjectTechnologies(projectID string, technologyIDs [
 }
 
 func (r *repository) UpdateProjectImages(projectID string, images []models.ProjectImage) error {
-	var project models.Project
-	if err := r.db.Where("id = ?", projectID).First(&project).Error; err != nil {
-		return err
-	}
-
-	// For UUID primary keys, GORM Replace works best when IDs are managed
-	return r.db.Model(&project).Association("Images").Replace(images)
+	return r.db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Where("project_id = ?", projectID).Delete(&models.ProjectImage{}).Error; err != nil {
+			return err
+		}
+		if len(images) > 0 {
+			if err := tx.Create(&images).Error; err != nil {
+				return err
+			}
+		}
+		return nil
+	})
 }
 
 func (r *repository) UpdateProjectVideos(projectID string, videos []models.ProjectVideo) error {
-	var project models.Project
-	if err := r.db.Where("id = ?", projectID).First(&project).Error; err != nil {
-		return err
-	}
-
-	return r.db.Model(&project).Association("Videos").Replace(videos)
+	return r.db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Where("project_id = ?", projectID).Delete(&models.ProjectVideo{}).Error; err != nil {
+			return err
+		}
+		if len(videos) > 0 {
+			if err := tx.Create(&videos).Error; err != nil {
+				return err
+			}
+		}
+		return nil
+	})
 }

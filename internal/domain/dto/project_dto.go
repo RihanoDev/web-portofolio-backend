@@ -13,14 +13,13 @@ type CreateProjectRequest struct {
 	ThumbnailURL    string                 `json:"thumbnailUrl"`
 	Status          string                 `json:"status" validate:"required,oneof=draft published private"`
 	CategoryID      *int                   `json:"categoryId"`
-	Categories      []int                  `json:"categories"`
-	CategoryIds     []int                  `json:"categoryIds"`
-	CategoryIdStrs  []string               `json:"categoryIdStrs"`
 	AuthorID        int                    `json:"authorId"` // Not required anymore
 	GitHubURL       string                 `json:"githubUrl"`
 	LiveDemoURL     string                 `json:"liveDemoUrl"`
 	Images          []ProjectImageData     `json:"images"`
 	Videos          []ProjectVideoData     `json:"videos"`
+	Categories      []int                  `json:"categories"`      // Category IDs
+	CategoryNames   []string               `json:"categoryNames"`   // Category names for auto-creation
 	Technologies    []int                  `json:"technologies"`    // Tag IDs (preferred)
 	TechnologyNames []string               `json:"technologyNames"` // Alternative: Tag names
 	Metadata        map[string]interface{} `json:"metadata"`
@@ -35,14 +34,13 @@ type UpdateProjectRequest struct {
 	Status          *string                `json:"status" validate:"omitempty,oneof=draft published private"`
 	CategoryID      *int                   `json:"categoryId"`
 	Categories      []int                  `json:"categories"`
-	CategoryIds     []int                  `json:"categoryIds"`
-	CategoryIdStrs  []string               `json:"categoryIdStrs"`
+	CategoryNames   []string               `json:"categoryNames"`
 	GitHubURL       *string                `json:"githubUrl"`
 	LiveDemoURL     *string                `json:"liveDemoUrl"`
-	Images          []ProjectImageData     `json:"images"`
-	Videos          []ProjectVideoData     `json:"videos"`
 	Technologies    []int                  `json:"technologies"`    // Tag IDs (preferred)
 	TechnologyNames []string               `json:"technologyNames"` // Alternative: Tag names
+	Images          []ProjectImageData     `json:"images"`
+	Videos          []ProjectVideoData     `json:"videos"`
 	Metadata        map[string]interface{} `json:"metadata"`
 }
 

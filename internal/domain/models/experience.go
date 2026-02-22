@@ -45,14 +45,14 @@ type Experience struct {
 	Location         string
 	StartDate        time.Time `gorm:"not null"`
 	EndDate          *time.Time
-	Current          bool        `gorm:"default:false"`
-	Description      string      `gorm:"type:text"`
-	Responsibilities StringArray `gorm:"type:jsonb"`                         // Keep as JSON for flexibility
-	Technologies     []Tag       `gorm:"many2many:experience_technologies;"` // Use relational for indexing
+	Current          bool              `gorm:"default:false"`
+	Description      string            `gorm:"type:text"`
+	Responsibilities StringArray       `gorm:"type:jsonb"`                         // Keep as JSON for flexibility
+	Technologies     []Tag             `gorm:"many2many:experience_technologies;"` // Use relational for indexing
+	Images           []ExperienceImage `gorm:"foreignKey:ExperienceID;constraint:OnDelete:CASCADE;"`
 	CompanyURL       string
 	LogoURL          string
-	Images           []ExperienceImage `gorm:"foreignKey:ExperienceID"`
-	Metadata         string            `gorm:"type:jsonb;default:'{}'"` // Flexible data like theme, extra info
+	Metadata         string `gorm:"type:jsonb;default:'{}'"` // Flexible data like theme, extra info
 	CreatedAt        time.Time
 	UpdatedAt        time.Time
 }

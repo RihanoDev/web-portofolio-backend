@@ -24,33 +24,33 @@ type Article struct {
 	Metadata         string         `gorm:"type:jsonb"`
 	Categories       []Category     `gorm:"many2many:article_categories;"`
 	Tags             []Tag          `gorm:"many2many:article_tags;"`
-	Images           []ArticleImage `gorm:"foreignKey:ArticleID"`
-	Videos           []ArticleVideo `gorm:"foreignKey:ArticleID"`
+	Images           []ArticleImage `gorm:"foreignKey:ArticleID;constraint:OnDelete:CASCADE;"`
+	Videos           []ArticleVideo `gorm:"foreignKey:ArticleID;constraint:OnDelete:CASCADE;"`
 	CreatedAt        time.Time
 	UpdatedAt        time.Time
 }
 
-// ArticleImage for multiple images in an article
+// ArticleImage represents an image related to an article
 type ArticleImage struct {
-	ID        string `gorm:"primaryKey;type:uuid"`
-	ArticleID string `gorm:"type:uuid"`
-	URL       string `gorm:"not null"`
-	Caption   string
-	AltText   string
-	SortOrder int `gorm:"not null;default:0"`
-	CreatedAt time.Time
-	UpdatedAt time.Time
+	ID        string    `gorm:"primaryKey;type:uuid"`
+	ArticleID string    `gorm:"not null;index"`
+	URL       string    `gorm:"not null"`
+	Caption   string    `gorm:"type:text"`
+	AltText   string    `gorm:"type:text"`
+	SortOrder int       `gorm:"default:0"`
+	CreatedAt time.Time `gorm:"autoCreateTime"`
+	UpdatedAt time.Time `gorm:"autoUpdateTime"`
 }
 
-// ArticleVideo for videos in an article
+// ArticleVideo represents a video related to an article
 type ArticleVideo struct {
-	ID        string `gorm:"primaryKey;type:uuid"`
-	ArticleID string `gorm:"type:uuid"`
-	URL       string `gorm:"not null"`
-	Caption   string
-	SortOrder int `gorm:"not null;default:0"`
-	CreatedAt time.Time
-	UpdatedAt time.Time
+	ID        string    `gorm:"primaryKey;type:uuid"`
+	ArticleID string    `gorm:"not null;index"`
+	URL       string    `gorm:"not null"`
+	Caption   string    `gorm:"type:text"`
+	SortOrder int       `gorm:"default:0"`
+	CreatedAt time.Time `gorm:"autoCreateTime"`
+	UpdatedAt time.Time `gorm:"autoUpdateTime"`
 }
 
 // BeforeCreate hook to generate UUID

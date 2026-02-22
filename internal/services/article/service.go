@@ -62,7 +62,7 @@ func NewService(
 	}
 }
 
-// convertStringIDsToInts converts string IDs to integer IDs, handling both numeric IDs and tag names
+// convertStringIDsToInts converts string IDs to integer IDs, handling both numeric IDs and names
 func (s *Service) convertStringIDsToInts(stringIDs []string, isForTags bool) ([]int, error) {
 	var intIDs []int
 	for _, strID := range stringIDs {
@@ -514,8 +514,6 @@ func (s *Service) UpdateArticle(id string, req dto.UpdateArticleRequest) (*dto.A
 			return nil, fmt.Errorf("failed to marshal metadata: %v", err)
 		}
 		article.Metadata = string(metadataJSON)
-	} else {
-		// Set empty JSON object if no metadata provided
 		article.Metadata = "{}"
 	}
 
