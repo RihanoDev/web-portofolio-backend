@@ -11,11 +11,29 @@ import (
 
 type encodeResponseWriter struct {
 	gin.ResponseWriter
-	body *bytes.Buffer
+	body       *bytes.Buffer
+	statusCode int
+	written    bool
 }
 
-func (w encodeResponseWriter) Write(b []byte) (int, error) {
+func (w *encodeResponseWriter) Write(b []byte) (int, error) {
 	return w.body.Write(b)
+}
+
+func (w *encodeResponseWriter) WriteHeader(statusCode int) {
+	// Intercept and hold the status code – we'll write later
+	w.statusCode = statusCode
+}
+
+func (w *encodeResponseWriter) WriteHeaderNow() {
+	// Prevent Gin from flushing the real header too early
+}
+
+func (w *encodeResponseWriter) Status() int {
+	if w.statusCode != 0 {
+		return w.statusCode
+	}
+	return w.ResponseWriter.Status()
 }
 
 func EncodeResponse() gin.HandlerFunc {
@@ -33,21 +51,30 @@ func EncodeResponse() gin.HandlerFunc {
 		w := &encodeResponseWriter{
 			body:           bytes.NewBufferString(""),
 			ResponseWriter: c.Writer,
+			statusCode:     200,
 		}
 		c.Writer = w
 
 		c.Next()
 
-		if w.Status() == 204 || w.body.Len() == 0 {
+		statusCode := w.statusCode
+		if statusCode == 0 {
+			statusCode = 200
+		}
+
+		if statusCode == 204 || w.body.Len() == 0 {
+			w.ResponseWriter.WriteHeader(statusCode)
 			return
 		}
 
 		encodedBytes := []byte(base64.StdEncoding.EncodeToString(w.body.Bytes()))
 
-		w.ResponseWriter.Header().Set("Content-Length", strconv.Itoa(len(encodedBytes)))
-		w.ResponseWriter.Header().Set("Content-Type", "text/plain")
-		w.ResponseWriter.Header().Set("X-Encoded-Response", "true")
+		header := w.ResponseWriter.Header()
+		header.Set("Content-Length", strconv.Itoa(len(encodedBytes)))
+		header.Set("Content-Type", "text/plain; charset=utf-8")
+		header.Set("X-Encoded-Response", "true")
 
-		w.ResponseWriter.Write(encodedBytes)
+		w.ResponseWriter.WriteHeader(statusCode)
+		w.ResponseWriter.Write(encodedBytes) //nolint:errcheck
 	}
 }
