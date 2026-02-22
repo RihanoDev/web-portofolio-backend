@@ -21,8 +21,8 @@ type Project struct {
 	Author       User   `gorm:"foreignKey:AuthorID"`
 	Tags         []Tag  `gorm:"many2many:project_tags;"` // Add many-to-many tags like articles
 	Metadata     string `gorm:"type:jsonb;default:'{}'"`
-	GitHubURL    string
-	LiveDemoURL  string
+	GitHubURL    string `gorm:"column:github_url"`
+	LiveDemoURL  string `gorm:"column:live_demo_url"`
 	CreatedAt    time.Time
 	UpdatedAt    time.Time
 }

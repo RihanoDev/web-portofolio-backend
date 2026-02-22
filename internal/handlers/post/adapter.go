@@ -112,10 +112,10 @@ func (a *PostServiceAdapter) GetByID(id string) (*models.Post, error) {
 func (a *PostServiceAdapter) Update(id string, post *models.Post) error {
 	// Convert Post to UpdateArticleRequest
 	req := dto.UpdateArticleRequest{
-		Title:            post.Title,
-		Content:          post.Content,
-		Status:           post.Status,
-		FeaturedImageURL: post.FeaturedImageURL,
+		Title:            &post.Title,
+		Content:          &post.Content,
+		Status:           &post.Status,
+		FeaturedImageURL: &post.FeaturedImageURL,
 	}
 
 	// Use ArticleService to update the article

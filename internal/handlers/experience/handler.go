@@ -97,6 +97,11 @@ func (h *Handler) Update(c *gin.Context) {
 	h.httpAdapter.SendSuccessResponse(c, http.StatusOK, experience, "Experience updated successfully")
 }
 
+// Patch partially updates an experience (alias to Update)
+func (h *Handler) Patch(c *gin.Context) {
+	h.Update(c)
+}
+
 // Delete deletes an experience by ID
 func (h *Handler) Delete(c *gin.Context) {
 	id, err := h.httpAdapter.ParseIntIDParam(c, "id")
