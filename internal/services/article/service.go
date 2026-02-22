@@ -3,6 +3,7 @@ package article
 import (
 	"encoding/json"
 	"fmt"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -15,6 +16,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/gosimple/slug"
+	"gorm.io/gorm"
 )
 
 // Helper functions for parsing metadata
@@ -45,6 +47,7 @@ type Service struct {
 	categoryRepo categoryRepo.Repository
 	tagRepo      tagRepo.Repository
 	userService  userService.Service
+	db           *gorm.DB
 }
 
 // NewService creates a new article service
@@ -53,12 +56,14 @@ func NewService(
 	categoryRepo categoryRepo.Repository,
 	tagRepo tagRepo.Repository,
 	userService userService.Service,
+	db *gorm.DB,
 ) *Service {
 	return &Service{
 		articleRepo:  articleRepo,
 		categoryRepo: categoryRepo,
 		tagRepo:      tagRepo,
 		userService:  userService,
+		db:           db,
 	}
 }
 
@@ -453,6 +458,13 @@ func (s *Service) UpdateArticle(id string, req dto.UpdateArticleRequest) (*dto.A
 		article.Content = *req.Content
 	}
 	if req.FeaturedImageURL != nil {
+		if *req.FeaturedImageURL == "" && article.FeaturedImageURL != "" {
+			var media models.Media
+			if err := s.db.Where("file_url = ?", article.FeaturedImageURL).First(&media).Error; err == nil {
+				os.Remove(media.FilePath)
+				s.db.Delete(&media)
+			}
+		}
 		article.FeaturedImageURL = *req.FeaturedImageURL
 	}
 

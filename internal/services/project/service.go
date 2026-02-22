@@ -3,6 +3,7 @@ package project
 import (
 	"encoding/json"
 	"fmt"
+	"os"
 	"strconv"
 	"web-porto-backend/internal/domain/dto"
 	"web-porto-backend/internal/domain/models"
@@ -13,44 +14,8 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/gosimple/slug"
+	"gorm.io/gorm"
 )
-
-// Helper functions for parsing metadata
-func getString(data map[string]interface{}, key string) string {
-	if val, ok := data[key]; ok {
-		if str, ok := val.(string); ok {
-			return str
-		}
-	}
-	return ""
-}
-
-func getInt(data map[string]interface{}, key string) int {
-	if val, ok := data[key]; ok {
-		if num, ok := val.(float64); ok {
-			return int(num)
-		}
-		if num, ok := val.(int); ok {
-			return num
-		}
-	}
-	return 0
-}
-
-func getStringArray(data map[string]interface{}, key string) []string {
-	if val, ok := data[key]; ok {
-		if arr, ok := val.([]interface{}); ok {
-			result := make([]string, 0, len(arr))
-			for _, item := range arr {
-				if str, ok := item.(string); ok {
-					result = append(result, str)
-				}
-			}
-			return result
-		}
-	}
-	return []string{}
-}
 
 // Service handles business logic for projects
 type Service struct {
@@ -58,6 +23,7 @@ type Service struct {
 	categoryRepo categoryRepo.Repository
 	userService  userService.Service
 	tagService   tagService.Service
+	db           *gorm.DB
 }
 
 // NewService creates a new project service
@@ -66,12 +32,14 @@ func NewService(
 	categoryRepo categoryRepo.Repository,
 	userService userService.Service,
 	tagService tagService.Service,
+	db *gorm.DB,
 ) *Service {
 	return &Service{
 		projectRepo:  projectRepo,
 		categoryRepo: categoryRepo,
 		userService:  userService,
 		tagService:   tagService,
+		db:           db,
 	}
 }
 
@@ -374,6 +342,13 @@ func (s *Service) UpdateProject(id string, req dto.UpdateProjectRequest) (*dto.P
 		project.Content = *req.Content
 	}
 	if req.ThumbnailURL != nil {
+		if *req.ThumbnailURL == "" && project.ThumbnailURL != "" {
+			var media models.Media
+			if err := s.db.Where("file_url = ?", project.ThumbnailURL).First(&media).Error; err == nil {
+				os.Remove(media.FilePath)
+				s.db.Delete(&media)
+			}
+		}
 		project.ThumbnailURL = *req.ThumbnailURL
 	}
 	if req.Status != nil {
