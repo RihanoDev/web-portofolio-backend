@@ -216,11 +216,24 @@ func (s *Service) CreateExperience(req dto.CreateExperienceRequest) (*dto.Experi
 			return nil, fmt.Errorf("failed to resolve technologies: %v", err)
 		}
 
-		// Update experience technologies
 		if err := s.experienceRepo.UpdateExperienceTechnologies(experience.ID, technologyIDs); err != nil {
 			fmt.Printf("[ExperienceService.Create] Association error: %v\n", err)
 			return nil, fmt.Errorf("failed to update experience technologies: %v", err)
 		}
+	}
+
+	// Handle Images
+	if len(req.Images) > 0 {
+		var images []models.ExperienceImage
+		for _, img := range req.Images {
+			images = append(images, models.ExperienceImage{
+				ExperienceID: experience.ID,
+				URL:          img.URL,
+				Caption:      img.Caption,
+				SortOrder:    img.SortOrder,
+			})
+		}
+		s.experienceRepo.UpdateExperienceImages(experience.ID, images)
 	}
 
 	// Return response
@@ -396,6 +409,20 @@ func (s *Service) UpdateExperience(id int, req dto.UpdateExperienceRequest) (*dt
 		}
 	}
 
+	// Handle Images
+	if len(req.Images) > 0 {
+		var images []models.ExperienceImage
+		for _, img := range req.Images {
+			images = append(images, models.ExperienceImage{
+				ExperienceID: experience.ID,
+				URL:          img.URL,
+				Caption:      img.Caption,
+				SortOrder:    img.SortOrder,
+			})
+		}
+		s.experienceRepo.UpdateExperienceImages(experience.ID, images)
+	}
+
 	// Reload dari DB agar mendapatkan Technologies yang terbaru
 	updatedExp, err := s.experienceRepo.GetByID(id)
 	if err != nil {
@@ -438,6 +465,7 @@ func (s *Service) mapToResponse(experience *models.Experience) *dto.ExperienceRe
 		Description:      experience.Description,
 		Responsibilities: []string(experience.Responsibilities),
 		Technologies:     []dto.TagResponse{}, // Initialize empty array
+		Images:           []dto.ExperienceImageResponse{},
 		CompanyURL:       experience.CompanyURL,
 		LogoURL:          experience.LogoURL,
 		Metadata:         make(map[string]interface{}),
@@ -451,6 +479,16 @@ func (s *Service) mapToResponse(experience *models.Experience) *dto.ExperienceRe
 			ID:   tag.ID,
 			Name: tag.Name,
 			Slug: tag.Slug,
+		})
+	}
+
+	// Add images from associations
+	for _, img := range experience.Images {
+		response.Images = append(response.Images, dto.ExperienceImageResponse{
+			ID:        img.ID,
+			URL:       img.URL,
+			Caption:   img.Caption,
+			SortOrder: img.SortOrder,
 		})
 	}
 

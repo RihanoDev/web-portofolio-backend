@@ -39,6 +39,8 @@ type UpdateArticleRequest struct {
 	TagIds           []int                  `json:"tagIds"`
 	TagIdStrs        []string               `json:"tagIdStrs"`
 	PublishAt        *time.Time             `json:"publishAt"`
+	Images           []ArticleImageData     `json:"images"`
+	Videos           []ArticleVideoData     `json:"videos"`
 	Metadata         map[string]interface{} `json:"metadata"`
 }
 

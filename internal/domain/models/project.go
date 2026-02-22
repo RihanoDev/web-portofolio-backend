@@ -16,13 +16,17 @@ type Project struct {
 	ThumbnailURL string
 	Status       string `gorm:"not null;default:'published'"`
 	CategoryID   *int
-	Category     *Category `gorm:"foreignKey:CategoryID"`
+	Category     *Category  `gorm:"foreignKey:CategoryID"`
+	Categories   []Category `gorm:"many2many:project_categories;"`
 	AuthorID     int
-	Author       User   `gorm:"foreignKey:AuthorID"`
-	Tags         []Tag  `gorm:"many2many:project_tags;"` // Add many-to-many tags like articles
-	Metadata     string `gorm:"type:jsonb;default:'{}'"`
-	GitHubURL    string `gorm:"column:github_url"`
-	LiveDemoURL  string `gorm:"column:live_demo_url"`
+	Author       User           `gorm:"foreignKey:AuthorID"`
+	Technologies []Tag          `gorm:"many2many:project_technologies;"`
+	Tags         []Tag          `gorm:"many2many:project_tags;"`
+	Metadata     string         `gorm:"type:jsonb;default:'{}'"`
+	GitHubURL    string         `gorm:"column:github_url"`
+	LiveDemoURL  string         `gorm:"column:live_demo_url"`
+	Images       []ProjectImage `gorm:"foreignKey:ProjectID;constraint:OnDelete:CASCADE;"`
+	Videos       []ProjectVideo `gorm:"foreignKey:ProjectID;constraint:OnDelete:CASCADE;"`
 	CreatedAt    time.Time
 	UpdatedAt    time.Time
 }

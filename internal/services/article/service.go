@@ -249,6 +249,38 @@ func (s *Service) CreateArticle(req dto.CreateArticleRequest) (*dto.ArticleRespo
 		}
 	}
 
+	// Sync Images
+	if len(req.Images) > 0 {
+		var images []models.ArticleImage
+		for _, img := range req.Images {
+			images = append(images, models.ArticleImage{
+				ArticleID: article.ID,
+				URL:       img.URL,
+				Caption:   img.Caption,
+				AltText:   img.AltText,
+				SortOrder: img.SortOrder,
+			})
+		}
+		s.articleRepo.UpdateArticleImages(article.ID, images)
+	}
+
+	// Sync Videos
+	if len(req.Videos) > 0 {
+		var videos []models.ArticleVideo
+		for _, vid := range req.Videos {
+			videos = append(videos, models.ArticleVideo{
+				ArticleID: article.ID,
+				URL:       vid.URL,
+				Caption:   vid.Caption,
+				SortOrder: vid.SortOrder,
+			})
+		}
+		s.articleRepo.UpdateArticleVideos(article.ID, videos)
+	}
+
+	// Final fetch to get media
+	article, _ = s.articleRepo.GetByID(article.ID)
+
 	// Convert article to response
 	return s.mapArticleToResponse(article), nil
 }

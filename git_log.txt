@@ -1,0 +1,30 @@
+c9cc77e (HEAD -> development) Merge branch 'main' of https://github.com/RihanoDev/web-portofolio-backend into development
+e799039 (tag: v1.1.4, origin/main, origin/HEAD, main) Development (#20)
+c2dcca6 (origin/development) update
+01be6d1 (tag: v1.1.3) fix: resolve build errors and restore missing fields/methods
+55603ee feat: restore backend functionality (multi-category, media support, auto-creation)
+a8248a1 (tag: v1.1.2) Development (#19)
+afebecb Merge branch 'development' of https://github.com/RihanoDev/web-portofolio-backend into development
+d22a0df Web be (#18)
+08e60ca fix update api
+74d6078 Merge branch 'main' of https://github.com/RihanoDev/web-portofolio-backend into development
+a135817 (tag: v1.1.1) Development (#17)
+e400407 Merge branch 'main' into development
+9428062 Merge branch 'development' of https://github.com/RihanoDev/web-portofolio-backend into development
+0281ff1 Web be (#16)
+1d5deaa (origin/web-be, web-be) fix key resp in exp cant updated
+18f755f Merge branch 'development' of https://github.com/RihanoDev/web-portofolio-backend into web-be
+ffc563c Merge branch 'main' of https://github.com/RihanoDev/web-portofolio-backend into development
+4eb19ec (tag: v1.1.0) Development (#15)
+cea8782 Merge branch 'main' into development
+9c11867 Merge branch 'development' of https://github.com/RihanoDev/web-portofolio-backend into development
+61faa4b Web be (#14)
+ca67685 fix encoder data and fix some relation and data response
+86de0ab Merge branch 'development' of https://github.com/RihanoDev/web-portofolio-backend into web-be
+4bc17ab Merge branch 'main' of https://github.com/RihanoDev/web-portofolio-backend into development
+a543cee (tag: v1.0.4) Web be (#12) (#13)
+be4b110 Merge branch 'development' of https://github.com/RihanoDev/web-portofolio-backend into development
+f22a2bb Web be (#12)
+bcd399b fix cors and rewwrite writehead
+7e2f2d7 Merge branch 'development' of https://github.com/RihanoDev/web-portofolio-backend into web-be
+b3924b2 (tag: v1.0.3, tag: v1.0.2) Merge branch 'development'

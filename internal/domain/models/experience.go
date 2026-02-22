@@ -48,7 +48,16 @@ type Experience struct {
 	Technologies     []Tag       `gorm:"many2many:experience_technologies;"` // Use relational for indexing
 	CompanyURL       string
 	LogoURL          string
-	Metadata         string `gorm:"type:jsonb;default:'{}'"` // Flexible data like theme, extra info
+	Metadata         string            `gorm:"type:jsonb;default:'{}'"`
+	Images           []ExperienceImage `gorm:"foreignKey:ExperienceID;constraint:OnDelete:CASCADE;"`
 	CreatedAt        time.Time
 	UpdatedAt        time.Time
+}
+
+type ExperienceImage struct {
+	ID           int    `gorm:"primaryKey;autoIncrement"`
+	ExperienceID int    `gorm:"index"`
+	URL          string `gorm:"not null"`
+	Caption      string
+	SortOrder    int `gorm:"default:0"`
 }
