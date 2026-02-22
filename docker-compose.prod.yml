@@ -10,6 +10,7 @@ services:
       - "1200:1200"
     volumes:
       - ./config.json:/app/config.json:ro
+      - ./uploads:/app/uploads
     depends_on:
       - db
   db:

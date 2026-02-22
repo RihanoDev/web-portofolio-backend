@@ -13,6 +13,9 @@ type CreateProjectRequest struct {
 	ThumbnailURL    string                 `json:"thumbnailUrl"`
 	Status          string                 `json:"status" validate:"required,oneof=draft published private"`
 	CategoryID      *int                   `json:"categoryId"`
+	Categories      []int                  `json:"categories"`
+	CategoryIds     []int                  `json:"categoryIds"`
+	CategoryIdStrs  []string               `json:"categoryIdStrs"`
 	AuthorID        int                    `json:"authorId"` // Not required anymore
 	GitHubURL       string                 `json:"githubUrl"`
 	LiveDemoURL     string                 `json:"liveDemoUrl"`
@@ -31,8 +34,13 @@ type UpdateProjectRequest struct {
 	ThumbnailURL    *string                `json:"thumbnailUrl"`
 	Status          *string                `json:"status" validate:"omitempty,oneof=draft published private"`
 	CategoryID      *int                   `json:"categoryId"`
+	Categories      []int                  `json:"categories"`
+	CategoryIds     []int                  `json:"categoryIds"`
+	CategoryIdStrs  []string               `json:"categoryIdStrs"`
 	GitHubURL       *string                `json:"githubUrl"`
 	LiveDemoURL     *string                `json:"liveDemoUrl"`
+	Images          []ProjectImageData     `json:"images"`
+	Videos          []ProjectVideoData     `json:"videos"`
 	Technologies    []int                  `json:"technologies"`    // Tag IDs (preferred)
 	TechnologyNames []string               `json:"technologyNames"` // Alternative: Tag names
 	Metadata        map[string]interface{} `json:"metadata"`
@@ -59,6 +67,7 @@ type ProjectResponse struct {
 	ThumbnailURL string                 `json:"thumbnailUrl"`
 	Status       string                 `json:"status"`
 	Category     *CategoryResponse      `json:"category,omitempty"`
+	Categories   []CategoryResponse     `json:"categories"`
 	Author       AuthorResponse         `json:"author"`
 	GitHubURL    string                 `json:"githubUrl"`
 	LiveDemoURL  string                 `json:"liveDemoUrl"`
@@ -93,6 +102,7 @@ type ProjectListResponse struct {
 	Status       string                 `json:"status"`
 	CategoryID   *int                   `json:"categoryId,omitempty"`
 	Category     string                 `json:"category,omitempty"`
+	Categories   []CategoryResponse     `json:"categories"`
 	AuthorName   string                 `json:"authorName"`
 	Tags         []TagResponse          `json:"tags,omitempty"`
 	Technologies []string               `json:"technologies"`

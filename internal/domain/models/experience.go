@@ -4,6 +4,9 @@ import (
 	"database/sql/driver"
 	"encoding/json"
 	"time"
+
+	"github.com/google/uuid"
+	"gorm.io/gorm"
 )
 
 // StringArray is a custom type for handling PostgreSQL arrays
@@ -48,7 +51,27 @@ type Experience struct {
 	Technologies     []Tag       `gorm:"many2many:experience_technologies;"` // Use relational for indexing
 	CompanyURL       string
 	LogoURL          string
-	Metadata         string `gorm:"type:jsonb;default:'{}'"` // Flexible data like theme, extra info
+	Images           []ExperienceImage `gorm:"foreignKey:ExperienceID"`
+	Metadata         string            `gorm:"type:jsonb;default:'{}'"` // Flexible data like theme, extra info
 	CreatedAt        time.Time
 	UpdatedAt        time.Time
+}
+
+// ExperienceImage for multiple images in an experience entry
+type ExperienceImage struct {
+	ID           string `gorm:"primaryKey;type:uuid"`
+	ExperienceID int    `gorm:"not null"`
+	URL          string `gorm:"not null"`
+	Caption      string
+	SortOrder    int `gorm:"not null;default:0"`
+	CreatedAt    time.Time
+	UpdatedAt    time.Time
+}
+
+// BeforeCreate hook for ExperienceImage
+func (ei *ExperienceImage) BeforeCreate(tx *gorm.DB) error {
+	if ei.ID == "" {
+		ei.ID = uuid.New().String()
+	}
+	return nil
 }

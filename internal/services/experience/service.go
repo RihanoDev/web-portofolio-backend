@@ -21,6 +21,18 @@ func getString(data map[string]interface{}, key string) string {
 	return ""
 }
 
+func getInt(data map[string]interface{}, key string) int {
+	if val, ok := data[key]; ok {
+		if num, ok := val.(float64); ok {
+			return int(num)
+		}
+		if num, ok := val.(int); ok {
+			return num
+		}
+	}
+	return 0
+}
+
 func getStringArray(data map[string]interface{}, key string) []string {
 	if val, ok := data[key]; ok {
 		if arr, ok := val.([]interface{}); ok {
@@ -119,20 +131,39 @@ func (s *Service) convertTechnologyNamesToIDs(technologyNames []string) ([]int, 
 	return technologyIDs, nil
 }
 
-// resolveTechnologies resolves technology IDs from either IDs or names
+// resolveTechnologies resolves technology IDs from all sources
 func (s *Service) resolveTechnologies(technologies []int, technologyNames []string) ([]int, error) {
-	// If we have technology IDs, use them
+	var allIDs []int
+
+	// Add int IDs
 	if len(technologies) > 0 {
-		return technologies, nil
+		allIDs = append(allIDs, technologies...)
 	}
 
-	// If we have technology names, convert them to IDs
+	// Convert and add technology names
 	if len(technologyNames) > 0 {
-		return s.convertTechnologyNamesToIDs(technologyNames)
+		ids, err := s.convertTechnologyNamesToIDs(technologyNames)
+		if err != nil {
+			return nil, err
+		}
+		allIDs = append(allIDs, ids...)
 	}
 
-	// No technologies provided
-	return []int{}, nil
+	// Deduplicate
+	return s.deduplicateIDs(allIDs), nil
+}
+
+// deduplicateIDs removes duplicate integer IDs
+func (s *Service) deduplicateIDs(ids []int) []int {
+	uniqueMap := make(map[int]bool)
+	var result []int
+	for _, id := range ids {
+		if id > 0 && !uniqueMap[id] {
+			uniqueMap[id] = true
+			result = append(result, id)
+		}
+	}
+	return result
 }
 
 // CreateExperience creates a new work experience entry
@@ -223,9 +254,24 @@ func (s *Service) CreateExperience(req dto.CreateExperienceRequest) (*dto.Experi
 		}
 	}
 
-	// Return response
-	fmt.Printf("[ExperienceService.Create] Successfully created experience ID %d\n", experience.ID)
-	return s.mapToResponse(experience), nil
+	// Handle images if provided
+	if len(req.Images) > 0 {
+		var expImages []models.ExperienceImage
+		for _, img := range req.Images {
+			expImages = append(expImages, models.ExperienceImage{
+				ExperienceID: experience.ID,
+				URL:          img.URL,
+				Caption:      img.Caption,
+				SortOrder:    img.SortOrder,
+			})
+		}
+		if err := s.experienceRepo.UpdateExperienceImages(experience.ID, expImages); err != nil {
+			return nil, fmt.Errorf("failed to add experience images: %v", err)
+		}
+	}
+
+	// Return response with fresh data
+	return s.GetExperienceByID(experience.ID)
 }
 
 // GetExperienceByID retrieves an experience entry by ID
@@ -396,6 +442,22 @@ func (s *Service) UpdateExperience(id int, req dto.UpdateExperienceRequest) (*dt
 		}
 	}
 
+	// Update images if provided
+	if req.Images != nil {
+		var expImages []models.ExperienceImage
+		for _, img := range req.Images {
+			expImages = append(expImages, models.ExperienceImage{
+				ExperienceID: experience.ID,
+				URL:          img.URL,
+				Caption:      img.Caption,
+				SortOrder:    img.SortOrder,
+			})
+		}
+		if err := s.experienceRepo.UpdateExperienceImages(experience.ID, expImages); err != nil {
+			return nil, fmt.Errorf("failed to update experience images: %v", err)
+		}
+	}
+
 	// Reload dari DB agar mendapatkan Technologies yang terbaru
 	updatedExp, err := s.experienceRepo.GetByID(id)
 	if err != nil {
@@ -440,9 +502,20 @@ func (s *Service) mapToResponse(experience *models.Experience) *dto.ExperienceRe
 		Technologies:     []dto.TagResponse{}, // Initialize empty array
 		CompanyURL:       experience.CompanyURL,
 		LogoURL:          experience.LogoURL,
+		Images:           []dto.ExperienceImageResponse{},
 		Metadata:         make(map[string]interface{}),
 		CreatedAt:        experience.CreatedAt,
 		UpdatedAt:        experience.UpdatedAt,
+	}
+
+	// Add images from database (primary source)
+	for _, img := range experience.Images {
+		response.Images = append(response.Images, dto.ExperienceImageResponse{
+			ID:        img.ID,
+			URL:       img.URL,
+			Caption:   img.Caption,
+			SortOrder: img.SortOrder,
+		})
 	}
 
 	// Add technologies from relational tags (primary source)
@@ -479,6 +552,23 @@ func (s *Service) mapToResponse(experience *models.Experience) *dto.ExperienceRe
 					response.Responsibilities = resps
 				} else if arr, ok := val.([]string); ok {
 					response.Responsibilities = arr
+				}
+			}
+
+			// Restore images from metadata if DB images are empty (backward compatibility)
+			if len(response.Images) == 0 {
+				if imagesData, ok := metadata["images"].([]interface{}); ok {
+					for _, imgData := range imagesData {
+						if imgMap, ok := imgData.(map[string]interface{}); ok {
+							image := dto.ExperienceImageResponse{
+								ID:        getString(imgMap, "id"),
+								URL:       getString(imgMap, "url"),
+								Caption:   getString(imgMap, "caption"),
+								SortOrder: getInt(imgMap, "sortOrder"),
+							}
+							response.Images = append(response.Images, image)
+						}
+					}
 				}
 			}
 

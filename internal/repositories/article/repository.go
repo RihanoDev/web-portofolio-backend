@@ -16,7 +16,10 @@ type Repository interface {
 	GetByAuthorID(authorID int, limit, offset int) ([]*models.Article, int64, error)
 	GetPublished(limit, offset int) ([]*models.Article, int64, error)
 	GetByCategory(categoryID int, limit, offset int) ([]*models.Article, int64, error)
-	GetByTag(tagID int, limit, offset int) ([]*models.Article, int64, error)
+	UpdateArticleCategories(articleID string, categoryIDs []int) error
+	UpdateArticleTags(articleID string, tagIDs []int) error
+	UpdateArticleImages(articleID string, images []models.ArticleImage) error
+	UpdateArticleVideos(articleID string, videos []models.ArticleVideo) error
 }
 
 type repository struct {
@@ -41,6 +44,8 @@ func (r *repository) GetByID(id string) (*models.Article, error) {
 	err := r.db.Preload("Author").
 		Preload("Categories").
 		Preload("Tags").
+		Preload("Images").
+		Preload("Videos").
 		Where("id = ?", id).First(&article).Error
 	if err != nil {
 		return nil, err
@@ -59,6 +64,8 @@ func (r *repository) GetAll(limit, offset int) ([]*models.Article, int64, error)
 	err := r.db.Preload("Author").
 		Preload("Categories").
 		Preload("Tags").
+		Preload("Images").
+		Preload("Videos").
 		Order("created_at DESC").
 		Limit(limit).Offset(offset).Find(&articles).Error
 
@@ -76,7 +83,27 @@ func (r *repository) Delete(id string) error {
 		return nil
 	}
 
-	return r.db.Delete(&models.Article{}, "id = ?", id).Error
+	return r.db.Transaction(func(tx *gorm.DB) error {
+		var article models.Article
+		if err := tx.Where("id = ?", id).First(&article).Error; err != nil {
+			return err
+		}
+
+		// Clear junction tables
+		if err := tx.Model(&article).Association("Categories").Clear(); err != nil {
+			return err
+		}
+		if err := tx.Model(&article).Association("Tags").Clear(); err != nil {
+			return err
+		}
+
+		// Delete the article
+		if err := tx.Delete(&article).Error; err != nil {
+			return err
+		}
+
+		return nil
+	})
 }
 
 func (r *repository) GetBySlug(slug string) (*models.Article, error) {
@@ -84,6 +111,8 @@ func (r *repository) GetBySlug(slug string) (*models.Article, error) {
 	err := r.db.Preload("Author").
 		Preload("Categories").
 		Preload("Tags").
+		Preload("Images").
+		Preload("Videos").
 		Where("slug = ?", slug).First(&article).Error
 	if err != nil {
 		return nil, err
@@ -136,6 +165,8 @@ func (r *repository) GetByCategory(categoryID int, limit, offset int) ([]*models
 	err := query.Preload("Author").
 		Preload("Categories").
 		Preload("Tags").
+		Preload("Images").
+		Preload("Videos").
 		Order("created_at DESC").
 		Limit(limit).Offset(offset).Find(&articles).Error
 
@@ -155,8 +186,58 @@ func (r *repository) GetByTag(tagID int, limit, offset int) ([]*models.Article, 
 	err := query.Preload("Author").
 		Preload("Categories").
 		Preload("Tags").
+		Preload("Images").
+		Preload("Videos").
 		Order("created_at DESC").
 		Limit(limit).Offset(offset).Find(&articles).Error
 
 	return articles, total, err
+}
+
+func (r *repository) UpdateArticleCategories(articleID string, categoryIDs []int) error {
+	var article models.Article
+	if err := r.db.Where("id = ?", articleID).First(&article).Error; err != nil {
+		return err
+	}
+
+	var categories []models.Category
+	if len(categoryIDs) > 0 {
+		if err := r.db.Where("id IN ?", categoryIDs).Find(&categories).Error; err != nil {
+			return err
+		}
+	}
+
+	return r.db.Model(&article).Association("Categories").Replace(categories)
+}
+
+func (r *repository) UpdateArticleTags(articleID string, tagIDs []int) error {
+	var article models.Article
+	if err := r.db.Where("id = ?", articleID).First(&article).Error; err != nil {
+		return err
+	}
+
+	var tags []models.Tag
+	if len(tagIDs) > 0 {
+		if err := r.db.Where("id IN ?", tagIDs).Find(&tags).Error; err != nil {
+			return err
+		}
+	}
+
+	return r.db.Model(&article).Association("Tags").Replace(tags)
+}
+
+func (r *repository) UpdateArticleImages(articleID string, images []models.ArticleImage) error {
+	var article models.Article
+	if err := r.db.Where("id = ?", articleID).First(&article).Error; err != nil {
+		return err
+	}
+	return r.db.Model(&article).Association("Images").Replace(images)
+}
+
+func (r *repository) UpdateArticleVideos(articleID string, videos []models.ArticleVideo) error {
+	var article models.Article
+	if err := r.db.Where("id = ?", articleID).First(&article).Error; err != nil {
+		return err
+	}
+	return r.db.Model(&article).Association("Videos").Replace(videos)
 }

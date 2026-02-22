@@ -3,6 +3,7 @@ package project
 import (
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"web-porto-backend/internal/domain/dto"
 	"web-porto-backend/internal/domain/models"
 	categoryRepo "web-porto-backend/internal/repositories/category"
@@ -102,20 +103,73 @@ func (s *Service) convertTechnologyNamesToIDs(technologyNames []string) ([]int, 
 	return technologyIDs, nil
 }
 
-// resolveTechnologies resolves technology IDs from either IDs or names
+// resolveTechnologies resolves technology IDs from all sources
 func (s *Service) resolveTechnologies(technologies []int, technologyNames []string) ([]int, error) {
-	// If we have technology IDs, use them
+	var allIDs []int
+
+	// If we have technology IDs, add them
 	if len(technologies) > 0 {
-		return technologies, nil
+		allIDs = append(allIDs, technologies...)
 	}
 
-	// If we have technology names, convert them to IDs
+	// If we have technology names, convert them to IDs and add them
 	if len(technologyNames) > 0 {
-		return s.convertTechnologyNamesToIDs(technologyNames)
+		ids, err := s.convertTechnologyNamesToIDs(technologyNames)
+		if err != nil {
+			return nil, err
+		}
+		allIDs = append(allIDs, ids...)
 	}
 
-	// No technologies provided
-	return []int{}, nil
+	// Deduplicate
+	return s.deduplicateIDs(allIDs), nil
+}
+
+// deduplicateIDs removes duplicate integer IDs
+func (s *Service) deduplicateIDs(ids []int) []int {
+	uniqueMap := make(map[int]bool)
+	var result []int
+	for _, id := range ids {
+		if id > 0 && !uniqueMap[id] {
+			uniqueMap[id] = true
+			result = append(result, id)
+		}
+	}
+	return result
+}
+
+// resolveCategoryIDs resolves category IDs from all sources
+func (s *Service) resolveCategoryIDs(categories []int, categoryIds []int, categoryIdStrs []string) ([]int, error) {
+	var ids []int
+	if len(categories) > 0 {
+		ids = append(ids, categories...)
+	}
+	if len(categoryIds) > 0 {
+		ids = append(ids, categoryIds...)
+	}
+	for _, idStr := range categoryIdStrs {
+		if id, err := strconv.Atoi(idStr); err == nil {
+			ids = append(ids, id)
+		} else if idStr != "" {
+			// Try to find or create category by name
+			cat, err := s.categoryRepo.FindByName(idStr)
+			if err != nil {
+				// Category doesn't exist, create it
+				newCat := &models.Category{
+					Name: idStr,
+					Slug: slug.Make(idStr),
+				}
+				if err := s.categoryRepo.Create(newCat); err != nil {
+					fmt.Printf("Error creating category '%s': %v\n", idStr, err)
+					continue
+				}
+				ids = append(ids, newCat.ID)
+			} else {
+				ids = append(ids, cat.ID)
+			}
+		}
+	}
+	return s.deduplicateIDs(ids), nil
 }
 
 // generateUniqueSlug memastikan slug yang dihasilkan unik di database.
@@ -180,7 +234,6 @@ func (s *Service) CreateProject(req dto.CreateProjectRequest) (*dto.ProjectRespo
 		Content:      req.Content,
 		ThumbnailURL: req.ThumbnailURL,
 		Status:       req.Status,
-		CategoryID:   req.CategoryID,
 		AuthorID:     authorID,
 		GitHubURL:    req.GitHubURL,
 		LiveDemoURL:  req.LiveDemoURL,
@@ -190,6 +243,19 @@ func (s *Service) CreateProject(req dto.CreateProjectRequest) (*dto.ProjectRespo
 	// Create the project
 	if err := s.projectRepo.Create(project); err != nil {
 		return nil, err
+	}
+
+	// Handle categories if provided
+	categoryIDs, err := s.resolveCategoryIDs(req.Categories, req.CategoryIds, req.CategoryIdStrs)
+	if err == nil && len(categoryIDs) > 0 {
+		if err := s.projectRepo.UpdateProjectCategories(project.ID, categoryIDs); err != nil {
+			fmt.Printf("Error adding category: %v\n", err)
+		}
+	} else if req.CategoryID != nil && *req.CategoryID > 0 {
+		// Backward compatibility for single categoryId
+		if err := s.projectRepo.UpdateProjectCategories(project.ID, []int{*req.CategoryID}); err != nil {
+			fmt.Printf("Error adding single category: %v\n", err)
+		}
 	}
 
 	// Handle technologies if provided
@@ -206,24 +272,40 @@ func (s *Service) CreateProject(req dto.CreateProjectRequest) (*dto.ProjectRespo
 		}
 	}
 
-	// Return project response
-	return &dto.ProjectResponse{
-		ID:           project.ID,
-		Title:        project.Title,
-		Slug:         project.Slug,
-		Description:  project.Description,
-		Content:      project.Content,
-		ThumbnailURL: project.ThumbnailURL,
-		Status:       project.Status,
-		GitHubURL:    project.GitHubURL,
-		LiveDemoURL:  project.LiveDemoURL,
-		CreatedAt:    project.CreatedAt,
-		UpdatedAt:    project.UpdatedAt,
-		Author: dto.AuthorResponse{
-			ID:       project.AuthorID,
-			Username: "user", // Default username
-		},
-	}, nil
+	// Handle images if provided
+	if len(req.Images) > 0 {
+		var projectImages []models.ProjectImage
+		for _, img := range req.Images {
+			projectImages = append(projectImages, models.ProjectImage{
+				ProjectID: project.ID,
+				URL:       img.URL,
+				Caption:   img.Caption,
+				SortOrder: img.SortOrder,
+			})
+		}
+		if err := s.projectRepo.UpdateProjectImages(project.ID, projectImages); err != nil {
+			return nil, fmt.Errorf("failed to add project images: %v", err)
+		}
+	}
+
+	// Handle videos if provided
+	if len(req.Videos) > 0 {
+		var projectVideos []models.ProjectVideo
+		for _, vid := range req.Videos {
+			projectVideos = append(projectVideos, models.ProjectVideo{
+				ProjectID: project.ID,
+				URL:       vid.URL,
+				Caption:   vid.Caption,
+				SortOrder: vid.SortOrder,
+			})
+		}
+		if err := s.projectRepo.UpdateProjectVideos(project.ID, projectVideos); err != nil {
+			return nil, fmt.Errorf("failed to add project videos: %v", err)
+		}
+	}
+
+	// Return project response with full data using GetProjectByID
+	return s.GetProjectByID(project.ID)
 }
 
 // GetProjectByID retrieves a project by ID
@@ -248,12 +330,32 @@ func (s *Service) GetProjectByID(id string) (*dto.ProjectResponse, error) {
 		UpdatedAt:    project.UpdatedAt,
 		Author: dto.AuthorResponse{
 			ID:       project.AuthorID,
-			Username: "user", // Default username
+			Username: project.Author.Username,
 		},
 		Images:       []dto.ProjectImageResponse{},
 		Videos:       []dto.ProjectVideoResponse{},
 		Technologies: []dto.TagResponse{},
 		Metadata:     make(map[string]interface{}),
+	}
+
+	// Add images from database (primary source)
+	for _, img := range project.Images {
+		response.Images = append(response.Images, dto.ProjectImageResponse{
+			ID:        img.ID,
+			URL:       img.URL,
+			Caption:   img.Caption,
+			SortOrder: img.SortOrder,
+		})
+	}
+
+	// Add videos from database (primary source)
+	for _, vid := range project.Videos {
+		response.Videos = append(response.Videos, dto.ProjectVideoResponse{
+			ID:        vid.ID,
+			URL:       vid.URL,
+			Caption:   vid.Caption,
+			SortOrder: vid.SortOrder,
+		})
 	}
 
 	// Parse metadata and restore rich data
@@ -262,32 +364,36 @@ func (s *Service) GetProjectByID(id string) (*dto.ProjectResponse, error) {
 		if err := json.Unmarshal([]byte(project.Metadata), &metadata); err == nil {
 			response.Metadata = metadata
 
-			// Restore images from metadata
-			if imagesData, ok := metadata["images"].([]interface{}); ok {
-				for _, imgData := range imagesData {
-					if imgMap, ok := imgData.(map[string]interface{}); ok {
-						image := dto.ProjectImageResponse{
-							ID:        getString(imgMap, "id"),
-							URL:       getString(imgMap, "url"),
-							Caption:   getString(imgMap, "caption"),
-							SortOrder: getInt(imgMap, "sortOrder"),
+			// Restore images from metadata if DB images are empty (backward compatibility)
+			if len(response.Images) == 0 {
+				if imagesData, ok := metadata["images"].([]interface{}); ok {
+					for _, imgData := range imagesData {
+						if imgMap, ok := imgData.(map[string]interface{}); ok {
+							image := dto.ProjectImageResponse{
+								ID:        getString(imgMap, "id"),
+								URL:       getString(imgMap, "url"),
+								Caption:   getString(imgMap, "caption"),
+								SortOrder: getInt(imgMap, "sortOrder"),
+							}
+							response.Images = append(response.Images, image)
 						}
-						response.Images = append(response.Images, image)
 					}
 				}
 			}
 
-			// Restore videos from metadata
-			if videosData, ok := metadata["videos"].([]interface{}); ok {
-				for _, vidData := range videosData {
-					if vidMap, ok := vidData.(map[string]interface{}); ok {
-						video := dto.ProjectVideoResponse{
-							ID:        getString(vidMap, "id"),
-							URL:       getString(vidMap, "url"),
-							Caption:   getString(vidMap, "caption"),
-							SortOrder: getInt(vidMap, "sortOrder"),
+			// Restore videos from metadata if DB videos are empty (backward compatibility)
+			if len(response.Videos) == 0 {
+				if videosData, ok := metadata["videos"].([]interface{}); ok {
+					for _, vidData := range videosData {
+						if vidMap, ok := vidData.(map[string]interface{}); ok {
+							video := dto.ProjectVideoResponse{
+								ID:        getString(vidMap, "id"),
+								URL:       getString(vidMap, "url"),
+								Caption:   getString(vidMap, "caption"),
+								SortOrder: getInt(vidMap, "sortOrder"),
+							}
+							response.Videos = append(response.Videos, video)
 						}
-						response.Videos = append(response.Videos, video)
 					}
 				}
 			}
@@ -330,13 +436,19 @@ func (s *Service) GetProjectByID(id string) (*dto.ProjectResponse, error) {
 		})
 	}
 
-	// Add category if available
-	if project.Category != nil {
-		response.Category = &dto.CategoryResponse{
-			ID:   *project.CategoryID,
-			Name: project.Category.Name,
-			Slug: project.Category.Slug,
+	// Add categories
+	if len(project.Categories) > 0 {
+		response.Categories = make([]dto.CategoryResponse, 0)
+		for _, cat := range project.Categories {
+			catResp := dto.CategoryResponse{
+				ID:   cat.ID,
+				Name: cat.Name,
+				Slug: cat.Slug,
+			}
+			response.Categories = append(response.Categories, catResp)
 		}
+		// For backward compatibility
+		response.Category = &response.Categories[0]
 	}
 
 	return response, nil
@@ -446,13 +558,19 @@ func (s *Service) GetProjectBySlug(slug string) (*dto.ProjectResponse, error) {
 		})
 	}
 
-	// Add category if available
-	if project.Category != nil {
-		response.Category = &dto.CategoryResponse{
-			ID:   *project.CategoryID,
-			Name: project.Category.Name,
-			Slug: project.Category.Slug,
+	// Add categories
+	if len(project.Categories) > 0 {
+		response.Categories = make([]dto.CategoryResponse, 0)
+		for _, cat := range project.Categories {
+			catResp := dto.CategoryResponse{
+				ID:   cat.ID,
+				Name: cat.Name,
+				Slug: cat.Slug,
+			}
+			response.Categories = append(response.Categories, catResp)
 		}
+		// For backward compatibility
+		response.Category = &response.Categories[0]
 	}
 
 	return response, nil
@@ -486,7 +604,6 @@ func (s *Service) ListProjects(page, size int) (*dto.PaginatedResponse, error) {
 			Content:      project.Content,
 			ThumbnailURL: project.ThumbnailURL,
 			Status:       project.Status,
-			CategoryID:   project.CategoryID,
 			AuthorName:   "user", // Default username
 			GitHubURL:    project.GitHubURL,
 			LiveDemoURL:  project.LiveDemoURL,
@@ -499,8 +616,20 @@ func (s *Service) ListProjects(page, size int) (*dto.PaginatedResponse, error) {
 		}
 
 		// Add category if available
-		if project.Category != nil {
-			listResponse.Category = project.Category.Name
+		// Add categories
+		catModels := make([]dto.CategoryResponse, 0)
+		for _, cat := range project.Categories {
+			catModels = append(catModels, dto.CategoryResponse{
+				ID:   cat.ID,
+				Name: cat.Name,
+				Slug: cat.Slug,
+			})
+		}
+		listResponse.Categories = catModels
+
+		if len(catModels) > 0 {
+			listResponse.Category = catModels[0].Name
+			listResponse.CategoryID = &catModels[0].ID
 		}
 
 		// Parse metadata for list view
@@ -601,6 +730,9 @@ func (s *Service) UpdateProject(id string, req dto.UpdateProjectRequest) (*dto.P
 	if len(id) > 0 && id[:5] == "temp-" {
 		// Create a new project instead
 		createReq := dto.CreateProjectRequest{
+			Categories:      req.Categories,
+			CategoryIds:     req.CategoryIds,
+			CategoryIdStrs:  req.CategoryIdStrs,
 			CategoryID:      req.CategoryID,
 			Technologies:    req.Technologies,
 			TechnologyNames: req.TechnologyNames,
@@ -670,8 +802,23 @@ func (s *Service) UpdateProject(id string, req dto.UpdateProjectRequest) (*dto.P
 	if req.Status != nil && *req.Status != "" {
 		project.Status = *req.Status
 	}
-	if req.CategoryID != nil {
-		project.CategoryID = req.CategoryID
+	// Update categories - always update if provided
+	categoryIDs, err := s.resolveCategoryIDs(req.Categories, req.CategoryIds, req.CategoryIdStrs)
+	if err == nil && (len(categoryIDs) > 0 || len(req.CategoryIdStrs) > 0) {
+		if err := s.projectRepo.UpdateProjectCategories(project.ID, categoryIDs); err != nil {
+			fmt.Printf("Error updating categories: %v\n", err)
+		}
+	} else if req.CategoryID != nil {
+		if *req.CategoryID > 0 {
+			if err := s.projectRepo.UpdateProjectCategories(project.ID, []int{*req.CategoryID}); err != nil {
+				fmt.Printf("Error updating single category: %v\n", err)
+			}
+		} else {
+			// Clear categories if CategoryID=0 or null
+			if err := s.projectRepo.UpdateProjectCategories(project.ID, []int{}); err != nil {
+				fmt.Printf("Error clearing categories: %v\n", err)
+			}
+		}
 	}
 
 	// Update metadata - always set to ensure it's updated
@@ -709,6 +856,38 @@ func (s *Service) UpdateProject(id string, req dto.UpdateProjectRequest) (*dto.P
 		// If no technologies provided, clear existing ones
 		if err := s.projectRepo.UpdateProjectTechnologies(project.ID, []int{}); err != nil {
 			return nil, fmt.Errorf("failed to clear project technologies: %v", err)
+		}
+	}
+
+	// Update images if provided
+	if req.Images != nil {
+		var projectImages []models.ProjectImage
+		for _, img := range req.Images {
+			projectImages = append(projectImages, models.ProjectImage{
+				ProjectID: project.ID,
+				URL:       img.URL,
+				Caption:   img.Caption,
+				SortOrder: img.SortOrder,
+			})
+		}
+		if err := s.projectRepo.UpdateProjectImages(project.ID, projectImages); err != nil {
+			return nil, fmt.Errorf("failed to update project images: %v", err)
+		}
+	}
+
+	// Update videos if provided
+	if req.Videos != nil {
+		var projectVideos []models.ProjectVideo
+		for _, vid := range req.Videos {
+			projectVideos = append(projectVideos, models.ProjectVideo{
+				ProjectID: project.ID,
+				URL:       vid.URL,
+				Caption:   vid.Caption,
+				SortOrder: vid.SortOrder,
+			})
+		}
+		if err := s.projectRepo.UpdateProjectVideos(project.ID, projectVideos); err != nil {
+			return nil, fmt.Errorf("failed to update project videos: %v", err)
 		}
 	}
 

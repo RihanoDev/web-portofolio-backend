@@ -1,6 +1,7 @@
 package project
 
 import (
+	"fmt"
 	"web-porto-backend/internal/domain/models"
 
 	"gorm.io/gorm"
@@ -15,6 +16,9 @@ type Repository interface {
 	GetBySlug(slug string) (*models.Project, error)
 	GetByCategorySlug(slug string, limit, offset int) ([]*models.Project, int64, error)
 	UpdateProjectTechnologies(projectID string, technologyIDs []int) error
+	UpdateProjectCategories(projectID string, categoryIDs []int) error
+	UpdateProjectImages(projectID string, images []models.ProjectImage) error
+	UpdateProjectVideos(projectID string, videos []models.ProjectVideo) error
 }
 
 type repository struct {
@@ -36,7 +40,7 @@ func (r *repository) GetByID(id string) (*models.Project, error) {
 	}
 
 	var project models.Project
-	err := r.db.Preload("Author").Preload("Category").Preload("Tags").Where("id = ?", id).First(&project).Error
+	err := r.db.Preload("Author").Preload("Categories").Preload("Tags").Preload("Images").Preload("Videos").Where("id = ?", id).First(&project).Error
 	if err != nil {
 		return nil, err
 	}
@@ -51,7 +55,7 @@ func (r *repository) GetAll(limit, offset int) ([]*models.Project, int64, error)
 	r.db.Model(&models.Project{}).Count(&total)
 
 	// Get paginated results with preloaded associations
-	err := r.db.Preload("Author").Preload("Category").Preload("Tags").
+	err := r.db.Preload("Author").Preload("Categories").Preload("Tags").Preload("Images").Preload("Videos").
 		Limit(limit).Offset(offset).Find(&projects).Error
 
 	return projects, total, err
@@ -67,12 +71,38 @@ func (r *repository) Delete(id string) error {
 		// Nothing to delete since it was a temporary ID
 		return nil
 	}
-	return r.db.Where("id = ?", id).Delete(&models.Project{}).Error
+
+	return r.db.Transaction(func(tx *gorm.DB) error {
+		var project models.Project
+		if err := tx.Where("id = ?", id).First(&project).Error; err != nil {
+			return err
+		}
+
+		// Manually clear ALL junction and related tables to avoid FK violations
+		// We do this manually because GORM associations might be misconfigured
+		// or not fully capture all tables defined in SQL migrations.
+		tables := []string{"project_tags", "project_technologies", "project_categories", "project_images", "project_videos"}
+		for _, table := range tables {
+			// Using Exec to bypass GORM's association logic and hit junction tables directly
+			if err := tx.Exec(fmt.Sprintf("DELETE FROM %s WHERE project_id = ?", table), id).Error; err != nil {
+				// We log but don't fail, as some tables might not exist or be empty
+				// The final tx.Delete will fail if a hard FK is still violated.
+				fmt.Printf("[ProjectRepo.Delete] Warning: failed to clear %s: %v\n", table, err)
+			}
+		}
+
+		// Delete the main project record
+		if err := tx.Delete(&project).Error; err != nil {
+			return err
+		}
+
+		return nil
+	})
 }
 
 func (r *repository) GetBySlug(slug string) (*models.Project, error) {
 	var project models.Project
-	err := r.db.Preload("Author").Preload("Category").Preload("Tags").
+	err := r.db.Preload("Author").Preload("Categories").Preload("Tags").Preload("Images").Preload("Videos").
 		Where("slug = ?", slug).First(&project).Error
 	if err != nil {
 		return nil, err
@@ -83,21 +113,34 @@ func (r *repository) GetBySlug(slug string) (*models.Project, error) {
 func (r *repository) GetByCategorySlug(slug string, limit, offset int) ([]*models.Project, int64, error) {
 	var projects []*models.Project
 	var total int64
-	var categoryID int
 
-	// First, get the category ID by slug
-	if err := r.db.Model(&models.Category{}).Where("slug = ?", slug).Select("id").Scan(&categoryID).Error; err != nil {
-		return nil, 0, err
-	}
+	query := r.db.Model(&models.Project{}).
+		Joins("JOIN project_categories pc ON pc.project_id = projects.id").
+		Joins("JOIN categories c ON c.id = pc.category_id").
+		Where("c.slug = ?", slug)
 
-	// Then, get projects with that category ID
-	query := r.db.Model(&models.Project{}).Where("category_id = ?", categoryID)
 	query.Count(&total)
 
-	err := query.Preload("Author").Preload("Category").
+	err := query.Preload("Author").Preload("Categories").
 		Limit(limit).Offset(offset).Find(&projects).Error
 
 	return projects, total, err
+}
+
+func (r *repository) UpdateProjectCategories(projectID string, categoryIDs []int) error {
+	var project models.Project
+	if err := r.db.Where("id = ?", projectID).First(&project).Error; err != nil {
+		return err
+	}
+
+	var categories []models.Category
+	if len(categoryIDs) > 0 {
+		if err := r.db.Where("id IN ?", categoryIDs).Find(&categories).Error; err != nil {
+			return err
+		}
+	}
+
+	return r.db.Model(&project).Association("Categories").Replace(categories)
 }
 
 func (r *repository) UpdateProjectTechnologies(projectID string, technologyIDs []int) error {
@@ -121,4 +164,23 @@ func (r *repository) UpdateProjectTechnologies(projectID string, technologyIDs [
 	}
 
 	return nil
+}
+
+func (r *repository) UpdateProjectImages(projectID string, images []models.ProjectImage) error {
+	var project models.Project
+	if err := r.db.Where("id = ?", projectID).First(&project).Error; err != nil {
+		return err
+	}
+
+	// For UUID primary keys, GORM Replace works best when IDs are managed
+	return r.db.Model(&project).Association("Images").Replace(images)
+}
+
+func (r *repository) UpdateProjectVideos(projectID string, videos []models.ProjectVideo) error {
+	var project models.Project
+	if err := r.db.Where("id = ?", projectID).First(&project).Error; err != nil {
+		return err
+	}
+
+	return r.db.Model(&project).Association("Videos").Replace(videos)
 }
