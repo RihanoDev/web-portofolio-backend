@@ -134,7 +134,7 @@ func main() {
 		},
 		AllowMethods:     []string{"GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"},
 		AllowHeaders:     []string{"Origin", "Content-Type", "Accept", "Authorization", "X-API-Key", "X-Requested-With", "Sec-WebSocket-Protocol", "Sec-WebSocket-Version", "Sec-WebSocket-Key", "Upgrade", "Connection"},
-		ExposeHeaders:    []string{"Content-Length", "Content-Type", "Upgrade", "Connection"},
+		ExposeHeaders:    []string{"Content-Length", "Content-Type", "Upgrade", "Connection", "X-Encoded-Response"},
 		AllowCredentials: true, // Enable credentials for auth
 		MaxAge:           12 * time.Hour,
 	}))
