@@ -61,7 +61,7 @@ func (a *Article) BeforeCreate(tx *gorm.DB) error {
 	return nil
 }
 
-// BeforeCreate hook for ArticleImage
+// BeforeCreate hook for ArticleImage.
 func (ai *ArticleImage) BeforeCreate(tx *gorm.DB) error {
 	if ai.ID == "" {
 		ai.ID = uuid.New().String()
