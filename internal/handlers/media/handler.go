@@ -63,8 +63,8 @@ func (h *Handler) Upload(c *gin.Context) {
 	}
 
 	// Validate file size
-	// Images max 10MB, Videos max 50MB
-	const maxImageSize int64 = 10 * 1024 * 1024 // 10 MB
+	// Images max 50MB, Videos max 50MB
+	const maxImageSize int64 = 50 * 1024 * 1024 // 50 MB
 	const maxVideoSize int64 = 50 * 1024 * 1024 // 50 MB
 	var maxSize int64 = maxImageSize
 

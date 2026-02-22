@@ -555,6 +555,23 @@ func (s *Service) mapToResponse(experience *models.Experience) *dto.ExperienceRe
 				}
 			}
 
+			// Restore images from metadata if DB images are empty (backward compatibility)
+			if len(response.Images) == 0 {
+				if imagesData, ok := metadata["images"].([]interface{}); ok {
+					for _, imgData := range imagesData {
+						if imgMap, ok := imgData.(map[string]interface{}); ok {
+							image := dto.ExperienceImageResponse{
+								ID:        getString(imgMap, "id"),
+								URL:       getString(imgMap, "url"),
+								Caption:   getString(imgMap, "caption"),
+								SortOrder: getInt(imgMap, "sortOrder"),
+							}
+							response.Images = append(response.Images, image)
+						}
+					}
+				}
+			}
+
 			if companyURL := getString(metadata, "companyUrl"); companyURL != "" {
 				response.CompanyURL = companyURL
 			}

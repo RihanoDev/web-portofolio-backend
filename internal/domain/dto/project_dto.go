@@ -18,8 +18,8 @@ type CreateProjectRequest struct {
 	LiveDemoURL     string                 `json:"liveDemoUrl"`
 	Images          []ProjectImageData     `json:"images"`
 	Videos          []ProjectVideoData     `json:"videos"`
-	Categories      []int                  `json:"categories"`
-	CategoryNames   []string               `json:"categoryNames"`
+	Categories      []int                  `json:"categories"`      // Category IDs
+	CategoryNames   []string               `json:"categoryNames"`   // Category names for auto-creation
 	Technologies    []int                  `json:"technologies"`    // Tag IDs (preferred)
 	TechnologyNames []string               `json:"technologyNames"` // Alternative: Tag names
 	Metadata        map[string]interface{} `json:"metadata"`
@@ -33,10 +33,10 @@ type UpdateProjectRequest struct {
 	ThumbnailURL    *string                `json:"thumbnailUrl"`
 	Status          *string                `json:"status" validate:"omitempty,oneof=draft published private"`
 	CategoryID      *int                   `json:"categoryId"`
-	GitHubURL       *string                `json:"githubUrl"`
-	LiveDemoURL     *string                `json:"liveDemoUrl"`
 	Categories      []int                  `json:"categories"`
 	CategoryNames   []string               `json:"categoryNames"`
+	GitHubURL       *string                `json:"githubUrl"`
+	LiveDemoURL     *string                `json:"liveDemoUrl"`
 	Technologies    []int                  `json:"technologies"`    // Tag IDs (preferred)
 	TechnologyNames []string               `json:"technologyNames"` // Alternative: Tag names
 	Images          []ProjectImageData     `json:"images"`
@@ -100,6 +100,7 @@ type ProjectListResponse struct {
 	Status       string                 `json:"status"`
 	CategoryID   *int                   `json:"categoryId,omitempty"`
 	Category     string                 `json:"category,omitempty"`
+	Categories   []CategoryResponse     `json:"categories"`
 	AuthorName   string                 `json:"authorName"`
 	Tags         []TagResponse          `json:"tags,omitempty"`
 	Technologies []string               `json:"technologies"`

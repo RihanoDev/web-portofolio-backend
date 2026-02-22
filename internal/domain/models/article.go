@@ -32,7 +32,7 @@ type Article struct {
 
 // ArticleImage represents an image related to an article
 type ArticleImage struct {
-	ID        string    `gorm:"primaryKey;type:uuid;default:gen_random_uuid()"`
+	ID        string    `gorm:"primaryKey;type:uuid"`
 	ArticleID string    `gorm:"not null;index"`
 	URL       string    `gorm:"not null"`
 	Caption   string    `gorm:"type:text"`
@@ -44,7 +44,7 @@ type ArticleImage struct {
 
 // ArticleVideo represents a video related to an article
 type ArticleVideo struct {
-	ID        string    `gorm:"primaryKey;type:uuid;default:gen_random_uuid()"`
+	ID        string    `gorm:"primaryKey;type:uuid"`
 	ArticleID string    `gorm:"not null;index"`
 	URL       string    `gorm:"not null"`
 	Caption   string    `gorm:"type:text"`
@@ -57,6 +57,22 @@ type ArticleVideo struct {
 func (a *Article) BeforeCreate(tx *gorm.DB) error {
 	if a.ID == "" {
 		a.ID = uuid.New().String()
+	}
+	return nil
+}
+
+// BeforeCreate hook for ArticleImage.
+func (ai *ArticleImage) BeforeCreate(tx *gorm.DB) error {
+	if ai.ID == "" {
+		ai.ID = uuid.New().String()
+	}
+	return nil
+}
+
+// BeforeCreate hook for ArticleVideo
+func (av *ArticleVideo) BeforeCreate(tx *gorm.DB) error {
+	if av.ID == "" {
+		av.ID = uuid.New().String()
 	}
 	return nil
 }

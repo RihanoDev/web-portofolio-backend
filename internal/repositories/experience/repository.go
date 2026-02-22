@@ -66,7 +66,24 @@ func (r *repository) Update(experience *models.Experience) error {
 }
 
 func (r *repository) Delete(id int) error {
-	return r.db.Delete(&models.Experience{}, id).Error
+	return r.db.Transaction(func(tx *gorm.DB) error {
+		var experience models.Experience
+		if err := tx.Where("id = ?", id).First(&experience).Error; err != nil {
+			return err
+		}
+
+		// Clear junction tables
+		if err := tx.Model(&experience).Association("Technologies").Clear(); err != nil {
+			return err
+		}
+
+		// Delete the experience
+		if err := tx.Delete(&experience).Error; err != nil {
+			return err
+		}
+
+		return nil
+	})
 }
 
 func (r *repository) GetCurrent() ([]*models.Experience, error) {
@@ -98,16 +115,15 @@ func (r *repository) UpdateExperienceTechnologies(experienceID int, technologyID
 }
 
 func (r *repository) UpdateExperienceImages(experienceID int, images []models.ExperienceImage) error {
-	// Delete existing images first
-	if err := r.db.Where("experience_id = ?", experienceID).Delete(&models.ExperienceImage{}).Error; err != nil {
-		return err
-	}
-
-	// If no new images provided, we're done
-	if len(images) == 0 {
+	return r.db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Where("experience_id = ?", experienceID).Delete(&models.ExperienceImage{}).Error; err != nil {
+			return err
+		}
+		if len(images) > 0 {
+			if err := tx.Create(&images).Error; err != nil {
+				return err
+			}
+		}
 		return nil
-	}
-
-	// Create new images
-	return r.db.Create(&images).Error
+	})
 }

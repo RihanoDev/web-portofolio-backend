@@ -4,6 +4,9 @@ import (
 	"database/sql/driver"
 	"encoding/json"
 	"time"
+
+	"github.com/google/uuid"
+	"gorm.io/gorm"
 )
 
 // StringArray is a custom type for handling PostgreSQL arrays
@@ -54,13 +57,21 @@ type Experience struct {
 	UpdatedAt        time.Time
 }
 
-// ExperienceImage represents an image related to a work experience
+// ExperienceImage for multiple images in an experience entry
 type ExperienceImage struct {
-	ID           string    `gorm:"primaryKey;type:uuid;default:gen_random_uuid()"`
-	ExperienceID int       `gorm:"not null;index"`
-	URL          string    `gorm:"not null"`
-	Caption      string    `gorm:"type:text"`
-	SortOrder    int       `gorm:"default:0"`
-	CreatedAt    time.Time `gorm:"autoCreateTime"`
-	UpdatedAt    time.Time `gorm:"autoUpdateTime"`
+	ID           string `gorm:"primaryKey;type:uuid"`
+	ExperienceID int    `gorm:"not null"`
+	URL          string `gorm:"not null"`
+	Caption      string
+	SortOrder    int `gorm:"not null;default:0"`
+	CreatedAt    time.Time
+	UpdatedAt    time.Time
+}
+
+// BeforeCreate hook for ExperienceImage
+func (ei *ExperienceImage) BeforeCreate(tx *gorm.DB) error {
+	if ei.ID == "" {
+		ei.ID = uuid.New().String()
+	}
+	return nil
 }

@@ -257,22 +257,9 @@ func (s *Service) CreateArticle(req dto.CreateArticleRequest) (*dto.ArticleRespo
 
 	// Add categories if any
 	categoryIDs, err := s.resolveCategoryIDs(req.Categories, req.CategoryIds, req.CategoryIdStrs)
-	if err != nil {
-		return nil, fmt.Errorf("failed to resolve category IDs: %v", err)
-	}
-	if len(categoryIDs) > 0 {
-		for _, categoryID := range categoryIDs {
-			category, err := s.categoryRepo.FindByID(categoryID)
-			if err != nil {
-				// Log error but continue
-				fmt.Printf("Error adding category: %v\n", err)
-				continue
-			}
-			article.Categories = append(article.Categories, *category)
-		}
-		// Update article with categories
-		if err := s.articleRepo.Update(article); err != nil {
-			return nil, err
+	if err == nil && len(categoryIDs) > 0 {
+		if err := s.articleRepo.UpdateArticleCategories(article.ID, categoryIDs); err != nil {
+			fmt.Printf("Error adding categories: %v\n", err)
 		}
 	}
 
@@ -715,33 +702,37 @@ func (s *Service) mapArticleToResponse(article *models.Article) *dto.ArticleResp
 		if err := json.Unmarshal([]byte(article.Metadata), &metadata); err == nil {
 			response.Metadata = metadata
 
-			// Restore images from metadata
-			if imagesData, ok := metadata["images"].([]interface{}); ok {
-				for _, imgData := range imagesData {
-					if imgMap, ok := imgData.(map[string]interface{}); ok {
-						image := dto.ArticleImageResponse{
-							ID:        getString(imgMap, "id"),
-							URL:       getString(imgMap, "url"),
-							Caption:   getString(imgMap, "caption"),
-							AltText:   getString(imgMap, "altText"),
-							SortOrder: getInt(imgMap, "sortOrder"),
+			// Restore images from metadata if DB images are empty (backward compatibility)
+			if len(response.Images) == 0 {
+				if imagesData, ok := metadata["images"].([]interface{}); ok {
+					for _, imgData := range imagesData {
+						if imgMap, ok := imgData.(map[string]interface{}); ok {
+							image := dto.ArticleImageResponse{
+								ID:        getString(imgMap, "id"),
+								URL:       getString(imgMap, "url"),
+								Caption:   getString(imgMap, "caption"),
+								AltText:   getString(imgMap, "altText"),
+								SortOrder: getInt(imgMap, "sortOrder"),
+							}
+							response.Images = append(response.Images, image)
 						}
-						response.Images = append(response.Images, image)
 					}
 				}
 			}
 
-			// Restore videos from metadata
-			if videosData, ok := metadata["videos"].([]interface{}); ok {
-				for _, vidData := range videosData {
-					if vidMap, ok := vidData.(map[string]interface{}); ok {
-						video := dto.ArticleVideoResponse{
-							ID:        getString(vidMap, "id"),
-							URL:       getString(vidMap, "url"),
-							Caption:   getString(vidMap, "caption"),
-							SortOrder: getInt(vidMap, "sortOrder"),
+			// Restore videos from metadata if DB videos are empty (backward compatibility)
+			if len(response.Videos) == 0 {
+				if videosData, ok := metadata["videos"].([]interface{}); ok {
+					for _, vidData := range videosData {
+						if vidMap, ok := vidData.(map[string]interface{}); ok {
+							video := dto.ArticleVideoResponse{
+								ID:        getString(vidMap, "id"),
+								URL:       getString(vidMap, "url"),
+								Caption:   getString(vidMap, "caption"),
+								SortOrder: getInt(vidMap, "sortOrder"),
+							}
+							response.Videos = append(response.Videos, video)
 						}
-						response.Videos = append(response.Videos, video)
 					}
 				}
 			}
@@ -830,33 +821,37 @@ func (s *Service) mapArticleToListResponse(article *models.Article) dto.ArticleL
 		if err := json.Unmarshal([]byte(article.Metadata), &metadata); err == nil {
 			response.Metadata = metadata
 
-			// Restore images from metadata
-			if imagesData, ok := metadata["images"].([]interface{}); ok {
-				for _, imgData := range imagesData {
-					if imgMap, ok := imgData.(map[string]interface{}); ok {
-						image := dto.ArticleImageResponse{
-							ID:        getString(imgMap, "id"),
-							URL:       getString(imgMap, "url"),
-							Caption:   getString(imgMap, "caption"),
-							AltText:   getString(imgMap, "altText"),
-							SortOrder: getInt(imgMap, "sortOrder"),
+			// Restore images from metadata if DB images are empty (backward compatibility)
+			if len(response.Images) == 0 {
+				if imagesData, ok := metadata["images"].([]interface{}); ok {
+					for _, imgData := range imagesData {
+						if imgMap, ok := imgData.(map[string]interface{}); ok {
+							image := dto.ArticleImageResponse{
+								ID:        getString(imgMap, "id"),
+								URL:       getString(imgMap, "url"),
+								Caption:   getString(imgMap, "caption"),
+								AltText:   getString(imgMap, "altText"),
+								SortOrder: getInt(imgMap, "sortOrder"),
+							}
+							response.Images = append(response.Images, image)
 						}
-						response.Images = append(response.Images, image)
 					}
 				}
 			}
 
-			// Restore videos from metadata
-			if videosData, ok := metadata["videos"].([]interface{}); ok {
-				for _, vidData := range videosData {
-					if vidMap, ok := vidData.(map[string]interface{}); ok {
-						video := dto.ArticleVideoResponse{
-							ID:        getString(vidMap, "id"),
-							URL:       getString(vidMap, "url"),
-							Caption:   getString(vidMap, "caption"),
-							SortOrder: getInt(vidMap, "sortOrder"),
+			// Restore videos from metadata if DB videos are empty (backward compatibility)
+			if len(response.Videos) == 0 {
+				if videosData, ok := metadata["videos"].([]interface{}); ok {
+					for _, vidData := range videosData {
+						if vidMap, ok := vidData.(map[string]interface{}); ok {
+							video := dto.ArticleVideoResponse{
+								ID:        getString(vidMap, "id"),
+								URL:       getString(vidMap, "url"),
+								Caption:   getString(vidMap, "caption"),
+								SortOrder: getInt(vidMap, "sortOrder"),
+							}
+							response.Videos = append(response.Videos, video)
 						}
-						response.Videos = append(response.Videos, video)
 					}
 				}
 			}

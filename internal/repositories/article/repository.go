@@ -84,7 +84,27 @@ func (r *repository) Delete(id string) error {
 		return nil
 	}
 
-	return r.db.Delete(&models.Article{}, "id = ?", id).Error
+	return r.db.Transaction(func(tx *gorm.DB) error {
+		var article models.Article
+		if err := tx.Where("id = ?", id).First(&article).Error; err != nil {
+			return err
+		}
+
+		// Clear junction tables
+		if err := tx.Model(&article).Association("Categories").Clear(); err != nil {
+			return err
+		}
+		if err := tx.Model(&article).Association("Tags").Clear(); err != nil {
+			return err
+		}
+
+		// Delete the article
+		if err := tx.Delete(&article).Error; err != nil {
+			return err
+		}
+
+		return nil
+	})
 }
 
 func (r *repository) GetBySlug(slug string) (*models.Article, error) {
@@ -146,6 +166,8 @@ func (r *repository) GetByCategory(categoryID int, limit, offset int) ([]*models
 	err := query.Preload("Author").
 		Preload("Categories").
 		Preload("Tags").
+		Preload("Images").
+		Preload("Videos").
 		Order("created_at DESC").
 		Limit(limit).Offset(offset).Find(&articles).Error
 

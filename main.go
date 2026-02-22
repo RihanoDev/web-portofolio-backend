@@ -61,8 +61,13 @@ func main() {
 		&models.Media{},
 		&models.Setting{},
 		&models.Article{},
+		&models.ArticleImage{},
+		&models.ArticleVideo{},
 		&models.Project{},
+		&models.ProjectImage{},
+		&models.ProjectVideo{},
 		&models.Experience{},
+		&models.ExperienceImage{},
 	); err != nil {
 		log.Fatal("Failed to migrate database:", err)
 	}
@@ -169,12 +174,12 @@ func main() {
 func getUploadDir() string {
 	dir := os.Getenv("UPLOAD_DIR")
 	if dir == "" {
-		// Default: 'uploads' folder next to the binary
-		execPath, err := os.Executable()
+		// Use current working directory for local development
+		cwd, err := os.Getwd()
 		if err != nil {
 			dir = "./uploads"
 		} else {
-			dir = filepath.Join(filepath.Dir(execPath), "uploads")
+			dir = filepath.Join(cwd, "uploads")
 		}
 	}
 	return dir
