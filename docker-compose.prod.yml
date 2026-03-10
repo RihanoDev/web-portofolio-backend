@@ -39,3 +39,4 @@ volumes:
 
 networks:
   backend-net:
+    external: true
