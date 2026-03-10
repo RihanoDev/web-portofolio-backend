@@ -13,6 +13,8 @@ services:
       - ./uploads:/app/uploads
     depends_on:
       - db
+    networks:
+      - backend-net
   db:
     image: postgres:15
     environment:
@@ -22,10 +24,18 @@ services:
     volumes:
       - db_data:/var/lib/postgresql/data
     restart: unless-stopped
+    networks:
+      - backend-net
   adminer:
     image: adminer:4
     ports:
       - "8081:80"
     restart: unless-stopped
+    networks:
+      - backend-net
+  
 volumes:
   db_data:
+
+networks:
+  backend-net:

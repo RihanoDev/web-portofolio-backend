@@ -17,6 +17,8 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    networks:
+      - backend-net
 
   adminer:
     image: adminer:4
@@ -25,7 +27,12 @@ services:
       - "8081:8080"
     depends_on:
       - db
+    networks:
+      - backend-net
 
 volumes:
   db_data:
     driver: local
+
+networks:
+  backend-net:
