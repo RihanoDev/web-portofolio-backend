@@ -90,6 +90,7 @@ jobs:
             docker run -d \
               --name web-porto-backend-dev \
               --network backend-net \
+              -v /app/uploads/dev:/app/uploads \
               --restart unless-stopped \
               -p ${{ env.DEV_PORT }}:${{ env.DEV_PORT }} \
               -e GIN_MODE=debug \
@@ -105,6 +106,7 @@ jobs:
               -e REDIS_PASSWORD=${{ secrets.REDIS_PASSWORD }} \
               -e REDIS_DB=${{ secrets.REDIS_DB }} \
               -e JWT_SECRET=${{ secrets.JWT_SECRET }} \
+              -e BASE_URL=https://api-dev.rihanodev.com \
               ${{ env.IMAGE_NAME }}:dev-latest
 
             # Wait for container to start
