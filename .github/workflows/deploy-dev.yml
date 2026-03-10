@@ -89,6 +89,7 @@ jobs:
             echo "🚀 Starting new development container..."
             docker run -d \
               --name web-porto-backend-dev \
+              --network backend-net \
               --restart unless-stopped \
               -p ${{ env.DEV_PORT }}:${{ env.DEV_PORT }} \
               -e GIN_MODE=debug \

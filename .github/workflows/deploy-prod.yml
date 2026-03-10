@@ -91,6 +91,7 @@ jobs:
             echo "🚀 Starting new production container..."
             docker run -d \
               --name web-porto-backend-prod \
+              --network backend-net \
               --restart unless-stopped \
               -p ${{ env.PROD_PORT }}:${{ env.PROD_PORT }} \
               -e GIN_MODE=release \
