@@ -117,13 +117,14 @@ func main() {
 	router.Use(cors.New(cors.Config{
 		AllowOrigins: []string{
 			// Production domains
-			"https://rihanodev.com",
-			"https://www.rihanodev.com",
-			"https://cms.rihanodev.com",
+			"https://rihano.dev",
+			"https://www.rihano.dev",
+			"https://cms.rihano.dev",
 			"https://api.rihanodev.com",
+
 			// Development domains
-			"https://dev.rihanodev.com",
-			"https://cms-dev.rihanodev.com",
+			"https://dev.rihano.dev",
+			"https://cms-dev.rihano.dev",
 			"https://api-dev.rihanodev.com",
 			// Server IP (various ports)
 			"http://103.59.95.108",
